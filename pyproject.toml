@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "the-gathering"
+version = "1.0.0"
+description = "FastAPI-based chat application with real-time messaging"
+authors = [{name = "The Gathering Team"}]
+requires-python = ">=3.11"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+]
+ignore = [
+    "B008",  # Do not perform function calls in argument defaults (FastAPI Depends pattern)
+    "E501",  # Line too long (handled by formatter)
+]
+
+# Allow specific imports in test files that appear unused (pytest fixtures)
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "F401",  # Unused imports (pytest fixtures often appear unused)
+    "F811",  # Redefined name (pytest fixture parameters)
+    "B017",  # Blind exception assertions in tests are ok
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+# NOTE: pytest configuration is in pytest.ini (single source of truth)
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Start lenient, gradually enable
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+
+# Allow gradual typing
+disallow_any_unimported = false
+disallow_any_expr = false
+disallow_any_decorated = false
+disallow_any_explicit = false
+
+# SQLAlchemy and Pydantic compatibility
+plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
+
+[[tool.mypy.overrides]]
+module = [
+    "arq.*",
+    "deepl.*",
+    "yake.*",
+    "google.generativeai.*",
+    "langchain.*",
+    "langchain_openai.*",
+    "structlog.*",
+]
+ignore_missing_imports = true
