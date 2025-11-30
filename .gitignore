@@ -1,0 +1,51 @@
+# Environment variables
+.env
+.env.local
+.env.test
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# PyCharm
+.idea/
+
+# Database
+*.db
+*.sqlite3
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+__test
+
+# Documentation & Development Notes
+docs/
+CLAUDE.md
+*.roadmap.md
+*.analysis.md
+logs_*/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Development artifacts
+__old
+.archive/
+local_versions.txt
+*.log
+.claude/
+create_test_conversations.py
+NOTES.md
