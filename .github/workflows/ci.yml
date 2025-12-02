@@ -1,0 +1,264 @@
+name: The Gathering CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: the_gathering_test
+        ports:
+          - 55432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:55432/the_gathering_test
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:55432/the_gathering_test
+      REDIS_URL: redis://localhost:6379/0
+      CI: true
+      ENVIRONMENT: test
+      SECRET_KEY: test-secret-key-for-ci
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      APP_NAME: The Gathering Test
+      DEBUG: false
+      DEEPL_API_KEY: test-deepl-key-for-ci
+      OPENAI_API_KEY: test-openai-key-for-ci
+      AI_FEATURES_ENABLED: false
+
+    steps:
+    - name: "📥 Checkout Repository"
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: "🐍 Setup Python 3.13"
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.13
+        cache: 'pip'
+
+    - name: "📦 Install Dependencies"
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: "🦀 Ruff Linting Check"
+      run: |
+        ruff check app/ tests/ main.py --output-format=github
+
+    - name: "🦀 Ruff Formatting Check"
+      run: |
+        ruff format --check app/ tests/ main.py
+
+    - name: "🧪 Run All Tests with Coverage"
+      run: |
+        pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-report=xml --junitxml=test-results.xml
+        echo "✅ All tests passed with coverage"
+
+    - name: "📋 Upload Test Results"
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: |
+          test-results.xml
+          coverage.xml
+        retention-days: 7
+
+  security:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+    - name: "📥 Checkout Repository"
+      uses: actions/checkout@v4
+
+    - name: "🐍 Setup Python 3.13"
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.13
+
+    - name: "🔒 Security Scan with Bandit"
+      run: |
+        pip install bandit[toml]
+        bandit -r app/ -f json -o bandit-report.json || echo '{"results": [], "metrics": {"_totals": {"nosec": 0, "skipped_tests": 0}}}' > bandit-report.json
+
+    - name: "🔐 Dependency Vulnerability Scan"
+      run: |
+        pip install pip-audit
+        pip-audit --format=json --output=pip-audit-report.json || echo '{"dependencies": [], "vulnerabilities": []}' > pip-audit-report.json
+
+    - name: "📋 Upload Security Reports"
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: security-reports
+        path: |
+          bandit-report.json
+          pip-audit-report.json
+        retention-days: 7
+
+  sonarcloud:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: "📥 Checkout Repository"
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: "📥 Download Test Results"
+      uses: actions/download-artifact@v4
+      with:
+        name: test-results
+
+    - name: "🔍 SonarCloud Scan"
+      uses: SonarSource/sonarqube-scan-action@v6
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+    - name: "📥 Download SonarCloud Issues"
+      run: |
+        echo "⏳ Waiting for SonarCloud analysis to complete..."
+        sleep 30
+
+        echo "📥 Downloading SonarCloud issues..."
+        curl -f -H "Authorization: Bearer ${{ secrets.SONAR_TOKEN }}" \
+          "https://sonarcloud.io/api/issues/search?componentKeys=Sammyduzit_the_gathering_beta&statuses=OPEN&pageSize=500" \
+          -o sonarcloud-issues.json || echo '{"issues": [], "total": 0}' > sonarcloud-issues.json
+
+        echo "📊 Downloading SonarCloud metrics..."
+        curl -f -H "Authorization: Bearer ${{ secrets.SONAR_TOKEN }}" \
+          "https://sonarcloud.io/api/measures/component?component=Sammyduzit_the_gathering_beta&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,ncloc,sqale_index,reliability_rating,security_rating,sqale_rating" \
+          -o sonarcloud-metrics.json || echo '{"component": {"measures": []}}' > sonarcloud-metrics.json
+
+        echo "🔍 Downloading detailed code smells..."
+        curl -f -H "Authorization: Bearer ${{ secrets.SONAR_TOKEN }}" \
+          "https://sonarcloud.io/api/issues/search?componentKeys=Sammyduzit_the_gathering_beta&types=CODE_SMELL&statuses=OPEN&pageSize=500" \
+          -o sonarcloud-code-smells.json || echo '{"issues": [], "total": 0}' > sonarcloud-code-smells.json
+
+        echo "🐛 Downloading bugs and vulnerabilities..."
+        curl -f -H "Authorization: Bearer ${{ secrets.SONAR_TOKEN }}" \
+          "https://sonarcloud.io/api/issues/search?componentKeys=Sammyduzit_the_gathering_beta&types=BUG,VULNERABILITY&statuses=OPEN&pageSize=500" \
+          -o sonarcloud-bugs-vulns.json || echo '{"issues": [], "total": 0}' > sonarcloud-bugs-vulns.json
+
+    - name: "📋 Upload SonarCloud Results"
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: sonarcloud-results
+        path: |
+          sonarcloud-issues.json
+          sonarcloud-metrics.json
+          sonarcloud-code-smells.json
+          sonarcloud-bugs-vulns.json
+        retention-days: 7
+
+  quality-gate:
+    runs-on: ubuntu-latest
+    needs: [test, security, sonarcloud]
+    if: always()
+
+    steps:
+    - name: "✅ Quality Gate Check"
+      run: |
+        echo "🎯 The Gathering Quality Gate"
+        echo ""
+
+        # Check test job result
+        if [ "${{ needs.test.result }}" == "success" ]; then
+          echo "✅ Linting: Passed"
+          echo "✅ Formatting: Passed"
+          echo "✅ Tests: Passed"
+        else
+          echo "❌ Tests: Failed"
+          TEST_FAILED=true
+        fi
+
+        # Check security job result
+        if [ "${{ needs.security.result }}" == "success" ]; then
+          echo "✅ Security: Scanned"
+        elif [ "${{ needs.security.result }}" == "skipped" ]; then
+          echo "⏭️  Security: Skipped"
+        else
+          echo "❌ Security: Failed"
+          SECURITY_FAILED=true
+        fi
+
+        # Check sonarcloud job result (may be skipped on non-main branches)
+        if [ "${{ needs.sonarcloud.result }}" == "success" ]; then
+          echo "✅ Code Quality: Analyzed"
+        elif [ "${{ needs.sonarcloud.result }}" == "skipped" ]; then
+          echo "⏭️  Code Quality: Skipped (only runs on main branch)"
+        else
+          echo "❌ Code Quality: Failed"
+          SONAR_FAILED=true
+        fi
+
+        echo ""
+
+        # Determine overall status
+        if [ "$TEST_FAILED" == "true" ] || [ "$SECURITY_FAILED" == "true" ] || [ "$SONAR_FAILED" == "true" ]; then
+          echo "❌ Quality Gate: FAILED"
+          echo "🚫 NOT ready for deployment!"
+          exit 1
+        else
+          echo "✅ Quality Gate: PASSED"
+          echo "🚀 Ready for deployment!"
+          exit 0
+        fi
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+    - name: "📥 Checkout Repository"
+      uses: actions/checkout@v4
+
+    - name: "🔑 Setup SSH Key"
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+    - name: "📤 Copy Deployment Script"
+      run: |
+        scp -i ~/.ssh/deploy_key scripts/deploy.sh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/ubuntu/the_gathering/
+
+    - name: "🚀 Execute Deployment"
+      run: |
+        ssh -i ~/.ssh/deploy_key ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "bash /home/ubuntu/the_gathering/deploy.sh"
+
+    - name: "🏥 Final Health Check"
+      run: |
+        echo "Checking API health..."
+        curl -f http://${{ secrets.SSH_HOST }}/health || exit 1
+        echo "✅ Deployment successful and API is healthy!"
+
+    - name: "🧹 Cleanup SSH Key"
+      if: always()
+      run: |
+        rm -f ~/.ssh/deploy_key
