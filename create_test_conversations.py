@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 Script to create test conversations with philosophical discussions and memories.
-
 This script creates 5 conversation scenarios with Silas (philosophical AI) and generates
 long-term memories using the production LongTermMemoryService pipeline.
 
