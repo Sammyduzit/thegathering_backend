@@ -27,7 +27,10 @@ rsync -a --exclude='venv' --exclude='__pycache__' --exclude='*.pyc' \
 
 # Keep only last 2 backups
 echo "🧹 Cleaning old backups (keeping last 2)..."
-cd /home/ubuntu/backups && ls -dt */ | tail -n +3 | xargs rm -rf -- 2>/dev/null || true
+(cd /home/ubuntu/backups && ls -dt */ | tail -n +3 | xargs rm -rf -- 2>/dev/null) || true
+
+# Return to project directory
+cd "$PROJECT_DIR" || exit 1
 
 # Fetch latest changes
 echo "📥 Fetching latest code..."
