@@ -20,7 +20,14 @@ cd "$PROJECT_DIR" || exit 1
 echo "📦 Creating backup..."
 BACKUP_DIR="/home/ubuntu/backups/$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$BACKUP_DIR"
-cp -r "$PROJECT_DIR" "$BACKUP_DIR/" || echo "⚠️  Backup failed (non-critical)"
+
+# Backup only essential files (exclude venv, pycache)
+rsync -a --exclude='venv' --exclude='__pycache__' --exclude='*.pyc' \
+    "$PROJECT_DIR/" "$BACKUP_DIR/" || echo "⚠️  Backup failed (non-critical)"
+
+# Keep only last 2 backups
+echo "🧹 Cleaning old backups (keeping last 2)..."
+cd /home/ubuntu/backups && ls -dt */ | tail -n +3 | xargs rm -rf -- 2>/dev/null || true
 
 # Fetch latest changes
 echo "📥 Fetching latest code..."
@@ -60,11 +67,11 @@ sudo systemctl restart gathering-worker
 
 # Wait for services to start
 echo "⏳ Waiting for services to start..."
-sleep 5
+sleep 10
 
 # Health check
 echo "🏥 Running health check..."
-MAX_RETRIES=5
+MAX_RETRIES=10
 RETRY_COUNT=0
 HEALTH_URL="http://localhost:8000/health"
 
@@ -84,7 +91,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
 
     RETRY_COUNT=$((RETRY_COUNT + 1))
     echo "⏳ Health check attempt $RETRY_COUNT/$MAX_RETRIES..."
-    sleep 3
+    sleep 5
 done
 
 # Health check failed - rollback

@@ -247,6 +247,7 @@ jobs:
     - name: "📤 Copy Deployment Script"
       run: |
         scp -i ~/.ssh/deploy_key scripts/deploy.sh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/ubuntu/the_gathering/
+        ssh -i ~/.ssh/deploy_key ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "chmod +x /home/ubuntu/the_gathering/deploy.sh"
 
     - name: "🚀 Execute Deployment"
       run: |
