@@ -20,11 +20,7 @@ class BaseMemoryService:
     def __init__(self, keyword_extractor: IKeywordExtractor):
         self.keyword_extractor = keyword_extractor
 
-    async def _extract_keywords(
-        self,
-        text: str,
-        max_keywords: int = 10
-    ) -> list[str]:
+    async def _extract_keywords(self, text: str, max_keywords: int = 10) -> list[str]:
         """
         Extract keywords from text using keyword extractor.
 
@@ -37,29 +33,16 @@ class BaseMemoryService:
             return []
 
         try:
-            keywords = await self.keyword_extractor.extract_keywords(
-                text, max_keywords=max_keywords
-            )
-            logger.debug(
-                "keywords_extracted",
-                count=len(keywords),
-                keywords=keywords[:3] if keywords else []
-            )
+            keywords = await self.keyword_extractor.extract_keywords(text, max_keywords=max_keywords)
+            logger.debug("keywords_extracted", count=len(keywords), keywords=keywords[:3] if keywords else [])
             return keywords
         except Exception as e:
             logger.warning(
-                "keyword_extraction_failed",
-                error=str(e),
-                error_type=type(e).__name__,
-                text_length=len(text)
+                "keyword_extraction_failed", error=str(e), error_type=type(e).__name__, text_length=len(text)
             )
             return []
 
-    async def _extract_keywords_batch(
-        self,
-        texts: list[str],
-        max_keywords: int = 10
-    ) -> list[list[str]]:
+    async def _extract_keywords_batch(self, texts: list[str], max_keywords: int = 10) -> list[list[str]]:
         """
         Extract keywords from multiple texts.
 

@@ -1,5 +1,6 @@
 """Unit tests for LongTermMemoryService."""
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -62,6 +63,7 @@ class TestLongTermMemoryService:
                 sender_user_id=1,
                 sender_username="user",
                 content="Hello world",
+                sent_at=datetime.now(timezone.utc),
             )
         ]
         deps["message_repo"].get_conversation_messages.return_value = (messages, 1)
@@ -85,11 +87,13 @@ class TestLongTermMemoryService:
                 sender_user_id=1,
                 sender_username="human",
                 content="User says hi",
+                sent_at=datetime.now(timezone.utc),
             ),
             SimpleNamespace(
                 sender_user_id=None,
                 sender_username="AI assistant",
                 content="AI replies hello",
+                sent_at=datetime.now(timezone.utc),
             ),
         ]
         deps["message_repo"].get_conversation_messages.return_value = (messages, 2)
@@ -127,6 +131,7 @@ class TestLongTermMemoryService:
                 sender_user_id=1,
                 sender_username="user",
                 content="Hello",
+                sent_at=datetime.now(timezone.utc),
             )
         ]
         deps["message_repo"].get_conversation_messages.return_value = (messages, 1)
