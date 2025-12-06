@@ -130,7 +130,7 @@ async def cleanup_silas_data():
             print("═" * 68)
             print(" " * 25 + "SUMMARY")
             print("═" * 68)
-            print(f"\n  Successfully deleted:")
+            print("\n  Successfully deleted:")
             print(f"    • {deleted_conversations} conversations")
             print(f"    • {message_count} messages (via CASCADE)")
             print(f"    • {participant_count} participants (via CASCADE)")
