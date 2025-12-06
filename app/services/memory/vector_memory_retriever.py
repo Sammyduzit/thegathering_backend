@@ -4,9 +4,10 @@ from app.interfaces.keyword_extractor import IKeywordExtractor
 from app.interfaces.memory_retriever import IMemoryRetriever
 from app.models.ai_memory import AIMemory
 from app.repositories.ai_memory_repository import AIMemoryRepository
+from app.services.memory.base_memory_service import BaseMemoryService
 
 
-class VectorMemoryRetriever(IMemoryRetriever):
+class VectorMemoryRetriever(BaseMemoryService, IMemoryRetriever):
     """
     Hybrid memory retriever using vector search + keyword search with RRF fusion.
 
@@ -21,9 +22,9 @@ class VectorMemoryRetriever(IMemoryRetriever):
         embedding_service: IEmbeddingService,
         keyword_extractor: IKeywordExtractor,
     ):
+        super().__init__(keyword_extractor)
         self.memory_repo = memory_repo
         self.embedding_service = embedding_service
-        self.keyword_extractor = keyword_extractor
 
     async def retrieve_candidates(
         self,
@@ -205,7 +206,7 @@ class VectorMemoryRetriever(IMemoryRetriever):
 
         # Weighted RRF over pool
         memory_scores: dict[int, float] = {}
-        k = 60  # RRF constant
+        k = settings.rrf_constant_k
 
         # Assign weights per layer
         layer_weights = {
@@ -279,7 +280,7 @@ class VectorMemoryRetriever(IMemoryRetriever):
         Formula: Score = Σ(weight / (k + rank))
         """
         memory_scores: dict[int, float] = {}
-        k = 60  # RRF constant
+        k = settings.rrf_constant_k
 
         # Score vector results
         for rank, memory in enumerate(vector_results):
@@ -304,16 +305,6 @@ class VectorMemoryRetriever(IMemoryRetriever):
         )
 
         return sorted_memories[:limit]
-
-    async def _extract_keywords(self, text: str) -> list[str]:
-        """Extract keywords from text using keyword extractor."""
-        if not text or not text.strip():
-            return []
-
-        try:
-            return await self.keyword_extractor.extract_keywords(text, max_keywords=10)
-        except Exception:
-            return []
 
     def _filter_keyword_results(
         self,

@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     # TTL for short-term memories (in days)
     short_term_ttl_days: int = 7
 
+    # RRF (Reciprocal Rank Fusion) Configuration
+    rrf_constant_k: int = 60  # Standard RRF constant for rank fusion
+
     # Cookie Security Configuration
     cookie_domain: str | None = None
     cookie_secure: bool = DEFAULT_COOKIE_SECURE

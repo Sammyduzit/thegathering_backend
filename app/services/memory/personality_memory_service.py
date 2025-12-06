@@ -2,10 +2,11 @@ from app.interfaces.embedding_service import EmbeddingServiceError, IEmbeddingSe
 from app.interfaces.keyword_extractor import IKeywordExtractor
 from app.models.ai_memory import AIMemory
 from app.repositories.ai_memory_repository import AIMemoryRepository
+from app.services.memory.base_memory_service import BaseMemoryService
 from app.services.text_processing.text_chunking_service import TextChunkingService
 
 
-class PersonalityMemoryService:
+class PersonalityMemoryService(BaseMemoryService):
     """Service for uploading personality knowledge base (books, docs, etc)."""
 
     def __init__(
@@ -15,10 +16,10 @@ class PersonalityMemoryService:
         chunking_service: TextChunkingService,
         keyword_extractor: IKeywordExtractor,
     ):
+        super().__init__(keyword_extractor)
         self.memory_repo = memory_repo
         self.embedding_service = embedding_service
         self.chunking_service = chunking_service
-        self.keyword_extractor = keyword_extractor
 
     async def upload_personality(
         self,
@@ -68,7 +69,7 @@ class PersonalityMemoryService:
         # Create AIMemory per chunk
         memories = []
         for i, (chunk, keywords, embedding) in enumerate(zip(chunks, chunk_keywords, embeddings)):
-            summary = chunk[:200] + "..." if len(chunk) > 200 else chunk
+            summary = self._truncate_summary(chunk, max_length=200)
 
             memory = AIMemory(
                 entity_id=entity_id,
@@ -92,13 +93,3 @@ class PersonalityMemoryService:
             memories.append(created)
 
         return memories
-
-    async def _extract_keywords(self, text: str) -> list[str]:
-        """Extract keywords from text using keyword extractor."""
-        if not text or not text.strip():
-            return []
-
-        try:
-            return await self.keyword_extractor.extract_keywords(text, max_keywords=10)
-        except Exception:
-            return []

@@ -3,10 +3,11 @@ from app.interfaces.keyword_extractor import IKeywordExtractor
 from app.models.ai_memory import AIMemory
 from app.repositories.ai_memory_repository import AIMemoryRepository
 from app.repositories.message_repository import MessageRepository
+from app.services.memory.base_memory_service import BaseMemoryService
 from app.services.text_processing.text_chunking_service import TextChunkingService
 
 
-class LongTermMemoryService:
+class LongTermMemoryService(BaseMemoryService):
     """Service for creating long-term conversation archives."""
 
     def __init__(
@@ -26,11 +27,11 @@ class LongTermMemoryService:
         :param chunking_service: Text chunking service
         :param keyword_extractor: Keyword extractor (YAKE by default)
         """
+        super().__init__(keyword_extractor)
         self.memory_repo = memory_repo
         self.message_repo = message_repo
         self.embedding_service = embedding_service
         self.chunking_service = chunking_service
-        self.keyword_extractor = keyword_extractor
 
     async def create_long_term_archive(
         self,
@@ -63,8 +64,12 @@ class LongTermMemoryService:
         if not messages:
             return []
 
+        # Sort messages in chronological order (oldest first) for proper archiving
+        # Note: get_conversation_messages returns newest first (DESC), so we reverse
+        messages_chronological = sorted(messages, key=lambda m: m.sent_at)
+
         # Combine all message content with usernames
-        combined_text = "\n\n".join([f"{m.sender_username}: {m.content}" for m in messages])
+        combined_text = "\n\n".join([f"{m.sender_username}: {m.content}" for m in messages_chronological])
 
         # Chunk text
         chunks = self.chunking_service.chunk_text(combined_text)
@@ -88,7 +93,7 @@ class LongTermMemoryService:
         # Create AIMemory per chunk
         memories = []
         for i, (chunk, keywords, embedding) in enumerate(zip(chunks, chunk_keywords, embeddings)):
-            summary = chunk[:200] + "..." if len(chunk) > 200 else chunk
+            summary = self._truncate_summary(chunk, max_length=200)
 
             memory = AIMemory(
                 entity_id=entity_id,
@@ -110,19 +115,3 @@ class LongTermMemoryService:
             memories.append(created)
 
         return memories
-
-    async def _extract_keywords(self, text: str) -> list[str]:
-        """
-        Extract keywords from text using configured keyword extractor.
-
-        :param text: Text to extract keywords from
-        :return: List of extracted keywords (lowercase, normalized)
-        """
-        if not text or not text.strip():
-            return []
-
-        try:
-            keywords = await self.keyword_extractor.extract_keywords(text, max_keywords=10)
-            return keywords
-        except Exception:
-            return []

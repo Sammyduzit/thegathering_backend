@@ -1,3 +1,5 @@
+from typing import Any
+
 import structlog
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -117,7 +119,7 @@ class BackgroundService:
 
     @background_task_retry(max_retries=1, delay=0.5)
     async def log_user_activity_background(
-        self, user_id: int, activity_type: str, details: dict[str, any] = None
+        self, user_id: int, activity_type: str, details: dict[str, Any] | None = None
     ) -> None:
         """
         Log user activity in background.

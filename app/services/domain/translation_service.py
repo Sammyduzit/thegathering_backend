@@ -110,9 +110,9 @@ class TranslationService:
             created_translations = await self.translation_repo.bulk_create_translations(translation_objects)
 
             if created_translations:
-                print(f"✅ Saved {len(created_translations)} translations to database")
+                logger.info("translations_saved", count=len(created_translations))
             else:
-                print("❌ Failed to save translations to database")
+                logger.warning("translations_save_failed")
 
             return created_translations
 
@@ -141,14 +141,14 @@ class TranslationService:
             )
 
             if not translations:
-                print(f"No translations created for message {message_id}")
+                logger.debug("no_translations_created", message_id=message_id)
                 return 0
 
             translation_objects = await self.create_message_translations(
                 message_id=message_id, translations=translations
             )
 
-            print(f"Created {len(translation_objects)} translations for message {message_id}")
+            logger.info("translations_created", count=len(translation_objects), message_id=message_id)
             return len(translation_objects)
 
         except (TranslationError, ValueError, RuntimeError) as e:

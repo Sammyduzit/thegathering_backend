@@ -527,7 +527,11 @@ class ConversationService:
         return [
             ParticipantInfo(
                 id=p.user_id if p.user_id else p.ai_entity_id,
-                username=p.participant_name if p.user_id else p.ai_entity.username,
+                username=(
+                    p.participant_name if p.user_id
+                    else p.ai_entity.username if p.ai_entity
+                    else "Unknown"
+                ),
                 avatar_url=p.user.avatar_url if p.user_id else None,
                 status=p.user.status if p.user_id else p.ai_entity.status if p.ai_entity else "offline",
                 is_ai=p.is_ai,

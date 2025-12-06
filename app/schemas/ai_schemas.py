@@ -19,7 +19,7 @@ class AIEntityCreate(BaseModel):
 
     username: SanitizedString = Field(min_length=1, max_length=200, description="Unique AI username")
     description: str | None = Field(None, max_length=1000, description="AI entity description")
-    system_prompt: str = Field(min_length=1, max_length=5000, description="AI system prompt/instructions")
+    system_prompt: str = Field(min_length=1, max_length=50000, description="AI system prompt/instructions")
     model_name: SanitizedString = Field(min_length=1, max_length=100, description="LLM model name")
     temperature: float | None = Field(None, ge=MIN_AI_TEMPERATURE, le=MAX_AI_TEMPERATURE, description="LLM temperature")
     max_tokens: int | None = Field(None, ge=MIN_AI_MAX_TOKENS, le=MAX_AI_MAX_TOKENS, description="Max response tokens")
@@ -51,7 +51,7 @@ class AIEntityUpdate(BaseModel):
 
     username: SanitizedString | None = Field(None, min_length=1, max_length=200)
     description: str | None = Field(None, max_length=1000)
-    system_prompt: str | None = Field(None, min_length=1, max_length=5000)
+    system_prompt: str | None = Field(None, min_length=1, max_length=50000)
     model_name: SanitizedString | None = Field(None, min_length=1, max_length=100)
     temperature: float | None = Field(None, ge=MIN_AI_TEMPERATURE, le=MAX_AI_TEMPERATURE)
     max_tokens: int | None = Field(None, ge=MIN_AI_MAX_TOKENS, le=MAX_AI_MAX_TOKENS)

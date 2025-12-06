@@ -73,7 +73,7 @@ async def generate_avatar_url(username: str, style: str = "bottts") -> str:
     :return: Avatar URL
     """
     if not await is_valid_avatar_style(style):
-        print(f"Warning: Invalid style '{style}', falling back to 'bottts'")
+        logger.warning("invalid_avatar_style", style=style, fallback="bottts")
         style = "bottts"
 
     safe_username = urllib.parse.quote_plus(username.lower())

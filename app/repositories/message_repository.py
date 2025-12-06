@@ -412,7 +412,7 @@ class MessageRepository(IMessageRepository):
         """Delete message by ID."""
         message = await self.get_by_id(id)
         if message:
-            await self.db.delete(message)
+            self.db.delete(message)
             await self.db.commit()
             return True
         return False

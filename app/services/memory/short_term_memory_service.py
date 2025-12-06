@@ -2,9 +2,10 @@ from app.interfaces.keyword_extractor import IKeywordExtractor
 from app.models.ai_memory import AIMemory
 from app.models.message import Message
 from app.repositories.ai_memory_repository import AIMemoryRepository
+from app.services.memory.base_memory_service import BaseMemoryService
 
 
-class ShortTermMemoryService:
+class ShortTermMemoryService(BaseMemoryService):
     """Service for creating short-term conversation memories."""
 
     def __init__(
@@ -12,8 +13,8 @@ class ShortTermMemoryService:
         memory_repo: AIMemoryRepository,
         keyword_extractor: IKeywordExtractor,
     ):
+        super().__init__(keyword_extractor)
         self.memory_repo = memory_repo
-        self.keyword_extractor = keyword_extractor
 
     async def create_short_term_memory(
         self,
@@ -66,7 +67,7 @@ class ShortTermMemoryService:
 
         # Create simple summary (first 200 chars of first user message)
         first_message = user_messages[0].content
-        summary = first_message[:200] + "..." if len(first_message) > 200 else first_message
+        summary = self._truncate_summary(first_message, max_length=200)
 
         # Create memory
         memory = AIMemory(
@@ -88,13 +89,3 @@ class ShortTermMemoryService:
         )
 
         return await self.memory_repo.create(memory)
-
-    async def _extract_keywords(self, text: str) -> list[str]:
-        """Extract keywords from text using keyword extractor."""
-        if not text or not text.strip():
-            return []
-
-        try:
-            return await self.keyword_extractor.extract_keywords(text, max_keywords=10)
-        except Exception:
-            return []
