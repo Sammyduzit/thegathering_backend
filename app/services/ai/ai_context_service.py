@@ -59,24 +59,25 @@ class AIContextService:
             page_size=max_messages,
         )
 
-        # Convert to LLM message format
-        # All messages are treated as "user" role - the AI is a participant, not an assistant
-        # The AI's personality comes from the system_prompt, not from role differentiation
+        # Convert to LLM message format with proper role-tags
+        # AI's own messages: "assistant" role (for better LLM in-context learning)
+        # Others: "user" role with name prefix
         context_messages = []
         for msg in reversed(messages):  # Reverse to get chronological order
-            # Include sender name for context (AI needs to know who said what)
-            if msg.sender_user_id:
-                sender_name = msg.sender_user.username
-            elif msg.sender_ai_id:
-                if msg.sender_ai_id == ai_entity.id:
-                    sender_name = "You"  # AI's own previous messages
-                else:
-                    sender_name = msg.sender_ai.username  # Other AI entities
+            if msg.sender_ai_id == ai_entity.id:
+                # AI's own previous messages: "assistant" role, NO name prefix
+                context_messages.append({"role": "assistant", "content": msg.content})
             else:
-                sender_name = "Unknown"
+                # Others: "user" role, WITH name prefix
+                if msg.sender_user_id:
+                    sender_name = msg.sender_user.username
+                elif msg.sender_ai_id:
+                    sender_name = f"{msg.sender_ai.username} (AI)"
+                else:
+                    sender_name = "Unknown"
 
-            content = f"{sender_name}: {msg.content}"
-            context_messages.append({"role": "user", "content": content})
+                content = f"{sender_name}: {msg.content}"
+                context_messages.append({"role": "user", "content": content})
 
         logger.info(
             "conversation_context_built",
@@ -108,23 +109,25 @@ class AIContextService:
             page_size=max_messages,
         )
 
-        # Convert to LLM message format
-        # All messages are treated as "user" role - the AI is a chat participant
+        # Convert to LLM message format with proper role-tags
+        # AI's own messages: "assistant" role (for better LLM in-context learning)
+        # Others: "user" role with name prefix
         context_messages = []
         for msg in reversed(messages):  # Reverse to get chronological order
-            # Include sender name for context
-            if msg.sender_user_id:
-                sender_name = msg.sender_user.username
-            elif msg.sender_ai_id:
-                if msg.sender_ai_id == ai_entity.id:
-                    sender_name = "You"  # AI's own previous messages
-                else:
-                    sender_name = msg.sender_ai.username  # Other AI entities
+            if msg.sender_ai_id == ai_entity.id:
+                # AI's own previous messages: "assistant" role, NO name prefix
+                context_messages.append({"role": "assistant", "content": msg.content})
             else:
-                sender_name = "Unknown"
+                # Others: "user" role, WITH name prefix
+                if msg.sender_user_id:
+                    sender_name = msg.sender_user.username
+                elif msg.sender_ai_id:
+                    sender_name = f"{msg.sender_ai.username} (AI)"
+                else:
+                    sender_name = "Unknown"
 
-            content = f"{sender_name}: {msg.content}"
-            context_messages.append({"role": "user", "content": content})
+                content = f"{sender_name}: {msg.content}"
+                context_messages.append({"role": "user", "content": content})
 
         logger.info(
             "room_context_built",
@@ -211,13 +214,29 @@ class AIContextService:
             lines.append("Use these memories to personalize your responses and maintain conversation continuity:")
             lines.append("")
 
-        # Short-term
+        # Short-term (chunked memories)
         if short_term:
             lines.append("## Recent Context (this conversation):")
             lines.append("Use this for immediate conversation flow and continuity. Reference recent topics naturally.")
-            for mem in short_term:
-                lines.append(f"- {mem.summary}")
             lines.append("")
+
+            for mem in short_term:
+                # Show chunk metadata
+                chunk_info = mem.memory_metadata.get("message_range", "unknown")
+                lines.append(f"### Chunk {mem.memory_metadata.get('chunk_index', '?')} (Messages {chunk_info}):")
+
+                # Show FULL messages from this chunk (no truncation!)
+                if mem.memory_content and "messages" in mem.memory_content:
+                    messages = mem.memory_content["messages"]
+                    for msg in messages:  # All messages, full content
+                        sender_info = f"User {msg.get('sender_user_id')}" if msg.get('sender_user_id') else "You"
+                        content = msg.get("content", "")  # FULL content, no truncation!
+                        lines.append(f"  - {sender_info}: {content}")
+                else:
+                    # Fallback to summary if messages not available
+                    lines.append(f"  - {mem.summary}")
+
+                lines.append("")
 
         # Long-term
         if long_term:
@@ -261,6 +280,41 @@ class AIContextService:
 
         logger.debug("access_tracking_updated", memory_count=len(memories))
 
+    def build_retrieval_query(
+        self, messages: list[dict[str, str]], use_last_n: int = 3
+    ) -> str:
+        """
+        Build enhanced RAG query from recent messages for better context.
+
+        Combines last N messages, prioritizing questions, and removing name prefixes.
+        This helps with follow-up questions like "What about its performance?"
+        which need context from previous messages.
+
+        :param messages: Message history (in chronological order)
+        :param use_last_n: Number of recent messages to include in query (default: 3)
+        :return: Combined query string for RAG retrieval
+        """
+        if not messages:
+            return ""
+
+        recent_messages = messages[-use_last_n:]
+        query_parts = []
+
+        for msg in recent_messages:
+            content = msg.get("content", "")
+
+            # Remove name prefixes ("Alice: ..." → "...")
+            if ": " in content:
+                content = content.split(": ", 1)[1]
+
+            # Prioritize questions (prepend to query)
+            if "?" in content:
+                query_parts.insert(0, content)
+            else:
+                query_parts.append(content)
+
+        return "\n".join(query_parts)
+
     async def build_full_context(
         self,
         conversation_id: int | None,
@@ -291,8 +345,8 @@ class AIContextService:
         # Get memory context if enabled
         memory_context = None
         if include_memories and messages and user_id:
-            # Use last user message as query for semantic search
-            query = messages[-1]["content"]
+            # Build enhanced query from last 3 messages for better RAG context
+            query = self.build_retrieval_query(messages, use_last_n=3)
             memory_context = await self.get_ai_memories(
                 ai_entity_id=ai_entity.id,
                 user_id=user_id,

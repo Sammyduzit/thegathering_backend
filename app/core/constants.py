@@ -37,17 +37,17 @@ DEFAULT_AI_COOLDOWN_SECONDS = None  # None = no cooldown by default
 MIN_AI_COOLDOWN_SECONDS = 0  # 0 = no cooldown
 MAX_AI_COOLDOWN_SECONDS = 3600  # 1 hour maximum
 
-# Note: Default system prompts are defined in app.core.ai_prompts
-# Use get_prompt_template() to retrieve predefined prompt templates
-
 # AI Provider Configuration
 DEFAULT_PROVIDER_MODEL = "gpt-4o-mini"  # Cost optimization: 200x cheaper than gpt-4
 DEFAULT_PROVIDER_TEMPERATURE = 0.7
 DEFAULT_PROVIDER_MAX_TOKENS = 1024
 
 # Context Management
-MAX_CONTEXT_MESSAGES = 20  # Maximum messages to include in conversation context
+MAX_CONTEXT_MESSAGES = 50  # Maximum messages to include in conversation context (increased for long conversations)
 MAX_MEMORY_ENTRIES = 10  # Maximum memory entries to retrieve per AI entity
+
+# Short-Term Memory Configuration
+SHORT_TERM_CHUNK_SIZE = 24  # Messages per chunk (granular retrieval)
 
 # Authentication & Token Configuration
 DEFAULT_REFRESH_TOKEN_EXPIRE_DAYS = 7

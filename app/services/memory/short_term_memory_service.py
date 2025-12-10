@@ -6,7 +6,11 @@ from app.services.memory.base_memory_service import BaseMemoryService
 
 
 class ShortTermMemoryService(BaseMemoryService):
-    """Service for creating short-term conversation memories."""
+    """Service for creating chunked short-term conversation memories.
+
+    NEW ARCHITECTURE: Creates individual memory chunks from message segments.
+    Each chunk contains SHORT_TERM_CHUNK_SIZE messages (default: 24).
+    """
 
     def __init__(
         self,
@@ -16,58 +20,39 @@ class ShortTermMemoryService(BaseMemoryService):
         super().__init__(keyword_extractor)
         self.memory_repo = memory_repo
 
-    async def create_short_term_memory(
+    async def create_short_term_chunk(
         self,
         entity_id: int,
         user_ids: list[int],
         conversation_id: int,
-        messages: list[Message],
+        chunk_messages: list[Message],
+        chunk_index: int,
+        start_idx: int,
+        end_idx: int,
     ) -> AIMemory:
         """
-        Create short-term memory from recent conversation messages.
+        Create a single short-term memory chunk.
 
-        - Takes last 20 messages
-        - Filters only user messages (no system, no AI)
-        - Extracts keywords (YAKE)
-        - Creates simple summary
-        - NO embedding (fast!)
+        This method creates ONE chunk from the provided messages.
+        Orchestration of which chunks to create happens in the caller (background task).
 
         :param entity_id: AI entity ID
-        :param user_ids: List of user IDs (participants in conversation)
+        :param user_ids: List of user IDs (participants)
         :param conversation_id: Conversation ID
-        :param messages: List of recent messages
-        :return: Created AIMemory instance
+        :param chunk_messages: Messages for this specific chunk (already filtered)
+        :param chunk_index: Index of this chunk (0, 1, 2, ...)
+        :param start_idx: Starting message index in full conversation
+        :param end_idx: Ending message index in full conversation
+        :return: Created AIMemory instance for this chunk
         """
-        # Get last 20 messages
-        recent = messages[-20:] if len(messages) > 20 else messages
+        # Combine all chunk message content for keyword extraction
+        combined_text = " ".join([m.content for m in chunk_messages])
 
-        # Filter: Only user messages (not system, not AI)
-        user_messages = [m for m in recent if m.sender_user_id is not None and m.message_type != "system"]
-
-        if not user_messages:
-            # No user messages, create minimal memory
-            memory = AIMemory(
-                entity_id=entity_id,
-                user_ids=user_ids,
-                conversation_id=conversation_id,
-                summary="No recent user messages",
-                memory_content={"message_count": 0},
-                keywords=[],
-                importance_score=0.5,
-                embedding=None,  # No embedding for short-term
-                memory_metadata={"type": "short_term"},
-            )
-            return await self.memory_repo.create(memory)
-
-        # Combine user message content for keyword extraction
-        combined_text = " ".join([m.content for m in user_messages])
-
-        # Extract keywords
+        # Extract keywords (from THIS chunk only)
         keywords = await self._extract_keywords(combined_text)
 
-        # Create simple summary (first 200 chars of first user message)
-        first_message = user_messages[0].content
-        summary = self._truncate_summary(first_message, max_length=200)
+        # Create simple label for chunk
+        summary = f"Chunk {chunk_index} (Msgs {start_idx}–{end_idx})"
 
         # Create memory
         memory = AIMemory(
@@ -76,16 +61,24 @@ class ShortTermMemoryService(BaseMemoryService):
             conversation_id=conversation_id,
             summary=summary,
             memory_content={
-                "message_count": len(user_messages),
-                "last_messages": [
-                    {"sender": m.sender_user_id, "content": m.content}
-                    for m in user_messages[-5:]  # Store last 5
+                "message_count": len(chunk_messages),
+                "messages": [
+                    {
+                        "sender_user_id": m.sender_user_id,
+                        "sender_ai_id": m.sender_ai_id,
+                        "content": m.content,
+                    }
+                    for m in chunk_messages  # Store ALL messages in chunk!
                 ],
             },
             keywords=keywords,
             importance_score=1.0,
             embedding=None,  # No embedding for short-term
-            memory_metadata={"type": "short_term"},
+            memory_metadata={
+                "type": "short_term",
+                "chunk_index": chunk_index,
+                "message_range": f"{start_idx}-{end_idx}",
+            },
         )
 
         return await self.memory_repo.create(memory)

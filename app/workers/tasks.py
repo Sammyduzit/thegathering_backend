@@ -122,7 +122,13 @@ async def _create_inline_memory(
     conversation_repo,
 ) -> None:
     """
-    Create short-term memory after AI response (non-critical, inline).
+    Create short-term memory chunks incrementally after AI response.
+
+    INCREMENTAL CHUNKING:
+    - Get all conversation messages
+    - Calculate expected chunks (total_messages // 24)
+    - Get existing chunks from DB
+    - Create only missing chunks (idempotent)
 
     :param conversation_id: Conversation ID
     :param ai_entity: AI entity
@@ -137,6 +143,8 @@ async def _create_inline_memory(
         return
 
     try:
+        from app.core.constants import SHORT_TERM_CHUNK_SIZE
+
         keyword_extractor = create_keyword_extractor()
         short_term_service = ShortTermMemoryService(
             memory_repo=memory_repo,
@@ -154,26 +162,65 @@ async def _create_inline_memory(
             )
             return
 
-        # Get recent messages for memory creation
-        recent_messages, _ = await message_repo.get_conversation_messages(
+        # Get ALL messages for chunking (not just recent 20)
+        all_messages, total_count = await message_repo.get_conversation_messages(
             conversation_id=conversation_id,
             page=1,
-            page_size=20,
+            page_size=1000,  # High limit to get all messages
         )
 
-        await short_term_service.create_short_term_memory(
+        # Filter conversation messages (exclude system)
+        conversation_messages = [m for m in all_messages if m.message_type != "system"]
+        total_messages = len(conversation_messages)
+
+        # Calculate expected complete chunks
+        expected_complete_chunks = total_messages // SHORT_TERM_CHUNK_SIZE
+
+        # Get existing chunks
+        existing_chunks = await memory_repo.get_short_term_chunks(
+            conversation_id=conversation_id,
             entity_id=ai_entity.id,
-            user_ids=user_ids,
-            conversation_id=conversation_id,
-            messages=recent_messages,
         )
+        existing_chunk_count = len(existing_chunks)
 
-        logger.debug(
-            "short_term_memory_created",
-            ai_entity_id=ai_entity.id,
-            user_ids=user_ids,
-            conversation_id=conversation_id,
-        )
+        # Create newest chunk if needed (normalbetrieb: always just 1 new chunk)
+        if expected_complete_chunks > existing_chunk_count:
+            # Only create the newest chunk (the one that just reached 24 messages)
+            chunk_idx = existing_chunk_count
+            start_idx = chunk_idx * SHORT_TERM_CHUNK_SIZE
+            end_idx = start_idx + SHORT_TERM_CHUNK_SIZE - 1
+
+            # Slice messages for this chunk
+            chunk_messages = conversation_messages[start_idx : end_idx + 1]
+
+            # Create single chunk
+            await short_term_service.create_short_term_chunk(
+                entity_id=ai_entity.id,
+                user_ids=user_ids,
+                conversation_id=conversation_id,
+                chunk_messages=chunk_messages,
+                chunk_index=chunk_idx,
+                start_idx=start_idx,
+                end_idx=end_idx,
+            )
+
+            logger.debug(
+                "short_term_chunk_created",
+                ai_entity_id=ai_entity.id,
+                conversation_id=conversation_id,
+                total_messages=total_messages,
+                chunk_index=chunk_idx,
+                message_range=f"{start_idx}-{end_idx}",
+            )
+        else:
+            logger.debug(
+                "short_term_chunks_up_to_date",
+                ai_entity_id=ai_entity.id,
+                conversation_id=conversation_id,
+                total_messages=total_messages,
+                existing_chunks=existing_chunk_count,
+            )
+
     except Exception as e:
         # Non-critical: log warning, don't fail the task
         logger.warning(

@@ -47,12 +47,12 @@ class Settings(BaseSettings):
     keyword_top_n: int = 20  # Number of candidate keywords to extract before filtering
 
     # Memory retrieval limits
-    total_memory_limit: int = 7
+    total_memory_limit: int = 10
 
     # Guaranteed minimums per layer (for cross-layer RRF)
-    guaranteed_short_term: int = 1
-    guaranteed_long_term: int = 0
-    guaranteed_personality: int = 0
+    guaranteed_short_term: int = 2
+    guaranteed_long_term: int = 2
+    guaranteed_personality: int = 1
 
     # Layer weights for cross-layer RRF
     short_term_weight: float = 2.0

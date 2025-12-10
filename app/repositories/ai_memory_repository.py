@@ -69,24 +69,24 @@ class AIMemoryRepository(IAIMemoryRepository):
     async def search_by_keywords(self, entity_id: int, keywords: list[str], limit: int = 5) -> list[AIMemory]:
         """
         Simple keyword matching.
-        Returns memories ordered by importance score.
+        Returns memories ordered by importance score, then by recency.
         """
-        query = select(AIMemory).where(AIMemory.entity_id == entity_id)
-        query = query.order_by(desc(AIMemory.importance_score))
-        query = query.limit(limit * 3)  # Fetch more for filtering
+        keyword_query = select(AIMemory).where(AIMemory.entity_id == entity_id)
+        keyword_query = keyword_query.order_by(desc(AIMemory.importance_score), desc(AIMemory.created_at))
+        keyword_query = keyword_query.limit(limit * 3)  # Fetch more for filtering
 
-        result = await self.db.execute(query)
-        all_memories = list(result.scalars().all())
+        keyword_result = await self.db.execute(keyword_query)
+        all_candidate_memories = list(keyword_result.scalars().all())
 
         # Simple keyword filtering in Python (Phase 2)
         # Phase 3: Move to database query with proper GIN index
-        filtered = []
-        for memory in all_memories:
+        filtered_memories = []
+        for memory in all_candidate_memories:
             memory_keywords = memory.keywords or []
             if any(kw.lower() in [mk.lower() for mk in memory_keywords] for kw in keywords):
-                filtered.append(memory)
+                filtered_memories.append(memory)
 
-        return filtered[:limit]
+        return filtered_memories[:limit]
 
     async def delete(self, id: int) -> bool:
         """Hard delete for memories."""
@@ -160,12 +160,58 @@ class AIMemoryRepository(IAIMemoryRepository):
         cutoff_date = datetime.now() - timedelta(days=ttl_days)
 
         # Delete short-term memories older than cutoff
-        stmt = delete(AIMemory).where(
+        delete_stmt = delete(AIMemory).where(
             AIMemory.created_at < cutoff_date,
             AIMemory.memory_metadata["type"].as_string() == "short_term",
         )
 
-        result = await self.db.execute(stmt)
+        delete_result = await self.db.execute(delete_stmt)
         await self.db.commit()
 
-        return result.rowcount or 0
+        return delete_result.rowcount or 0
+
+    async def get_short_term_chunks(
+        self, conversation_id: int, entity_id: int
+    ) -> list[AIMemory]:
+        """
+        Get all short-term memory chunks for a conversation, ordered by chunk index.
+
+        :param conversation_id: Conversation ID
+        :param entity_id: AI entity ID
+        :return: List of chunk memories ordered by chunk_index
+        """
+        chunks_query = (
+            select(AIMemory)
+            .where(
+                AIMemory.conversation_id == conversation_id,
+                AIMemory.entity_id == entity_id,
+                AIMemory.memory_metadata["type"].as_string() == "short_term",
+            )
+            .order_by(AIMemory.memory_metadata["chunk_index"].as_integer())
+        )
+
+        chunks_result = await self.db.execute(chunks_query)
+        return list(chunks_result.scalars().all())
+
+    async def delete_short_term_chunks(
+        self, conversation_id: int, entity_id: int
+    ) -> int:
+        """
+        Delete all short-term chunks for a conversation.
+
+        Used when converting chunks to long-term memory.
+
+        :param conversation_id: Conversation ID
+        :param entity_id: AI entity ID
+        :return: Number of deleted chunks
+        """
+        delete_chunks_stmt = delete(AIMemory).where(
+            AIMemory.conversation_id == conversation_id,
+            AIMemory.entity_id == entity_id,
+            AIMemory.memory_metadata["type"].as_string() == "short_term",
+        )
+
+        delete_chunks_result = await self.db.execute(delete_chunks_stmt)
+        await self.db.commit()
+
+        return delete_chunks_result.rowcount or 0

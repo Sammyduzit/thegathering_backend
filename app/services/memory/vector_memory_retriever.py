@@ -116,21 +116,26 @@ class VectorMemoryRetriever(BaseMemoryService, IMemoryRetriever):
         Hybrid search (vector + keyword) within a single layer.
 
         Returns RRF-fused results from vector and keyword search.
+
+        Note: Short-term memories have no embeddings (embedding=None),
+        so we skip vector search for them and use keyword-only search.
         """
         # Extract keywords from query
         keywords = await self._extract_keywords(query)
 
-        # Vector search
-        embedding = await self.embedding_service.embed_text(query)
-        vector_results = await self.memory_repo.vector_search(
-            entity_id=entity_id,
-            embedding=embedding,
-            user_id=user_id,
-            conversation_id=conversation_id,
-            exclude_conversation_id=exclude_conversation_id,
-            memory_type=memory_type,
-            limit=limit,
-        )
+        # Vector search (skip for short-term - they have no embeddings)
+        vector_results = []
+        if memory_type != "short_term":
+            embedding = await self.embedding_service.embed_text(query)
+            vector_results = await self.memory_repo.vector_search(
+                entity_id=entity_id,
+                embedding=embedding,
+                user_id=user_id,
+                conversation_id=conversation_id,
+                exclude_conversation_id=exclude_conversation_id,
+                memory_type=memory_type,
+                limit=limit,
+            )
 
         # Keyword search (only if keywords exist)
         keyword_results = []
@@ -149,7 +154,7 @@ class VectorMemoryRetriever(BaseMemoryService, IMemoryRetriever):
                 memory_type=memory_type,
             )
 
-        # RRF fusion within layer
+        # RRF fusion within layer (or keyword-only for short-term)
         fused = self._rrf_fusion(
             vector_results=vector_results,
             keyword_results=keyword_results,
