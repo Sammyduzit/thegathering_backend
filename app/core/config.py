@@ -69,11 +69,12 @@ class Settings(BaseSettings):
 
     # Long-Term Memory Configuration
     ltm_provider: Literal["openai", "google"] = "google"
-    ltm_extraction_model: str = "gemini-1.5-flash"
+    ltm_extraction_model: str = "gemini-2.5-flash-lite"
     ltm_extraction_temperature: float = 0.3
     ltm_max_facts_per_chunk: int = 10
     ltm_min_importance_threshold: float = 0.3
-
+    ltm_extraction_max_retries: int = 3  # Number of retries before heuristic fallback
+    ltm_extraction_retry_delay: float = 1.0
     # RRF (Reciprocal Rank Fusion) Configuration
     rrf_constant_k: int = 60  # Standard RRF constant for rank fusion
 

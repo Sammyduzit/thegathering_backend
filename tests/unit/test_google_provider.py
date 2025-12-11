@@ -24,7 +24,7 @@ async def test_google_provider_generate_response(monkeypatch):
     # Patch ChatGoogleGenerativeAI to return our dummy
     monkeypatch.setattr(google_provider, "ChatGoogleGenerativeAI", lambda **kwargs: dummy_llm)
 
-    provider = GoogleProvider(api_key="dummy", model_name="gemini-1.5-flash")
+    provider = GoogleProvider(api_key="dummy", model_name="gemini-2.5-flash-lite")
 
     result = await provider.generate_response(
         messages=[{"role": "user", "content": "hi"}],

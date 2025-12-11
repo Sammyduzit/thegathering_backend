@@ -38,6 +38,18 @@ class FakeKeywordExtractor:
         return []
 
 
+class FakeLTMProvider:
+    """Fake AI provider for LTM fact extraction returning valid JSON."""
+
+    async def generate_response(self, **kwargs):
+        # Return valid fact JSON matching expected structure
+        return (
+            '{"facts": ['
+            '{"text": "User discussed memory storage", "importance": 0.5, "participants": ["User"], "theme": "Memory"}'
+            ']}'
+        )
+
+
 class FakeEmbeddingService:
     def __init__(self, raise_error: bool = False):
         self.raise_error = raise_error
@@ -55,11 +67,18 @@ class FakeLongEmbeddingService(FakeEmbeddingService):
             raise ValueError("embedding failed")
         return [[0.0] * 1536 for _ in texts]
 
+    async def embed_text(self, text: str):
+        if self.raise_error:
+            raise ValueError("embedding failed")
+        return [0.0] * 1536
 
-def _monkeypatch_ai_stack(monkeypatch, *, provider=None, embedding_service=None, keyword_extractor=None):
+
+def _monkeypatch_ai_stack(monkeypatch, *, provider=None, ltm_provider=None, embedding_service=None, keyword_extractor=None):
     """Monkeypatch AI dependencies used inside tasks."""
     if provider:
         monkeypatch.setattr("app.workers.tasks.OpenAIProvider", lambda *a, **k: provider)
+    if ltm_provider is not None:
+        monkeypatch.setattr("app.providers.google_provider.GoogleProvider", lambda *a, **k: ltm_provider)
     if embedding_service is not None:
         monkeypatch.setattr("app.workers.tasks.get_embedding_service", lambda: embedding_service)
         monkeypatch.setattr("app.workers.tasks.get_memory_retriever", lambda **kwargs: None)
@@ -188,7 +207,7 @@ async def test_create_long_term_memory_task_happy_path(
         select(Message)
         .where(Message.id.in_(message_ids))
         .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
-        .order_by(Message.created_at)
+        .order_by(Message.sent_at)
     )
     result_query = await db_session.execute(query)
     messages = list(result_query.scalars().all())
@@ -211,6 +230,7 @@ async def test_create_long_term_memory_task_happy_path(
 
     _monkeypatch_ai_stack(
         monkeypatch,
+        ltm_provider=FakeLTMProvider(),
         embedding_service=FakeLongEmbeddingService(),
         keyword_extractor=FakeKeywordExtractor(),
     )
@@ -311,6 +331,7 @@ async def test_create_long_term_memory_task_retries_on_embedding_error(
 
     _monkeypatch_ai_stack(
         monkeypatch,
+        ltm_provider=FakeLTMProvider(),
         embedding_service=FakeLongEmbeddingService(raise_error=True),
         keyword_extractor=FakeKeywordExtractor(),
     )

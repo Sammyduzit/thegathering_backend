@@ -27,6 +27,9 @@ class StubEmbeddingService:
     async def embed_text(self, text: str) -> list[float]:
         return [0.1] * settings.embedding_dimensions
 
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        return [[0.1] * settings.embedding_dimensions for _ in texts]
+
 
 class StubKeywordExtractor:
     """Keyword extractor stub."""
@@ -80,7 +83,7 @@ async def test_stm_to_ltm_flow(db_session):
         select(Message)
         .where(Message.id.in_(message_ids))
         .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
-        .order_by(Message.created_at)
+        .order_by(Message.sent_at)
     )
     result = await db_session.execute(query)
     messages = list(result.scalars().all())

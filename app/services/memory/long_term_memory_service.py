@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import re
@@ -92,7 +93,9 @@ class LongTermMemoryService(BaseMemoryService):
 
     async def _extract_facts_from_chunk(self, chunk_messages: list[dict]) -> list[dict]:
         """
-        Extract facts from chunk messages via LLM.
+        Extract facts from chunk messages via LLM with retry logic.
+
+        Uses exponential backoff for retries before falling back to heuristic extraction.
 
         :param chunk_messages: Messages with sender_name and content
         :return: List of facts [{"text": str, "importance": float, "participants": list, "theme": str}]
@@ -110,34 +113,59 @@ class LongTermMemoryService(BaseMemoryService):
         # Build prompt
         prompt = self._build_fact_extraction_prompt(formatted_messages)
 
-        try:
-            # Call LLM for fact extraction (correct method: generate_response)
-            llm_response = await self.ai_provider.generate_response(
-                messages=[{"role": "user", "content": prompt}],
-                temperature=settings.ltm_extraction_temperature,
-            )
+        # Retry loop with exponential backoff
+        last_exception = None
+        for attempt in range(settings.ltm_extraction_max_retries):
+            try:
+                # Call LLM for fact extraction
+                llm_response = await self.ai_provider.generate_response(
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=settings.ltm_extraction_temperature,
+                )
 
-            # Parse facts from response
-            facts = self._parse_facts_response(llm_response)
+                # Parse facts from response
+                facts = self._parse_facts_response(llm_response)
 
-            # Filter by importance threshold and max facts
-            filtered_facts = [
-                f for f in facts
-                if f.get("importance", 0.0) >= settings.ltm_min_importance_threshold
-                and f.get("text")  # Must have text
-            ]
-            filtered_facts = filtered_facts[:settings.ltm_max_facts_per_chunk]
+                # Filter by importance threshold and max facts
+                filtered_facts = [
+                    f for f in facts
+                    if f.get("importance", 0.0) >= settings.ltm_min_importance_threshold
+                    and f.get("text")  # Must have text
+                ]
+                filtered_facts = filtered_facts[:settings.ltm_max_facts_per_chunk]
 
-            # Fallback to heuristic if LLM returned no usable facts
-            if not filtered_facts:
-                logger.info("ltm_llm_returned_no_facts_using_heuristic")
-                return self._extract_facts_heuristic(chunk_messages)
+                # Fallback to heuristic if LLM returned no usable facts
+                if not filtered_facts:
+                    logger.info("ltm_llm_returned_no_facts_using_heuristic")
+                    return self._extract_facts_heuristic(chunk_messages)
 
-            return filtered_facts
+                # Success - return filtered facts
+                if attempt > 0:
+                    logger.info("ltm_fact_extraction_succeeded_after_retry", attempt=attempt + 1)
+                return filtered_facts
 
-        except Exception as e:
-            logger.warning("ltm_fact_extraction_failed_using_heuristic", error=str(e))
-            return self._extract_facts_heuristic(chunk_messages)
+            except Exception as e:
+                last_exception = e
+                logger.warning(
+                    "ltm_fact_extraction_attempt_failed",
+                    attempt=attempt + 1,
+                    max_retries=settings.ltm_extraction_max_retries,
+                    error=str(e),
+                )
+
+                # If not last attempt, wait with exponential backoff
+                if attempt < settings.ltm_extraction_max_retries - 1:
+                    retry_delay = settings.ltm_extraction_retry_delay * (2**attempt)
+                    logger.debug("ltm_retrying_after_delay", delay_seconds=retry_delay)
+                    await asyncio.sleep(retry_delay)
+
+        # All retries exhausted - fall back to heuristic
+        logger.warning(
+            "ltm_all_retries_exhausted_using_heuristic",
+            retries=settings.ltm_extraction_max_retries,
+            last_error=str(last_exception),
+        )
+        return self._extract_facts_heuristic(chunk_messages)
 
     async def _create_ltm_entry(
         self,

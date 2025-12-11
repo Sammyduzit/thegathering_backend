@@ -12,7 +12,7 @@ from langchain_openai import ChatOpenAI
 
 from app.core.constants import (
     DEFAULT_PROVIDER_MAX_TOKENS,
-    DEFAULT_PROVIDER_MODEL,
+    DEFAULT_OPENAI_PROVIDER_MODEL,
     DEFAULT_PROVIDER_TEMPERATURE,
 )
 from app.interfaces.ai_provider import AIProviderError, IAIProvider
@@ -26,7 +26,7 @@ class OpenAIProvider(IAIProvider):
     def __init__(
         self,
         api_key: str,
-        model_name: str = DEFAULT_PROVIDER_MODEL,
+        model_name: str = DEFAULT_OPENAI_PROVIDER_MODEL,
         default_temperature: float = DEFAULT_PROVIDER_TEMPERATURE,
         default_max_tokens: int = DEFAULT_PROVIDER_MAX_TOKENS,
     ):

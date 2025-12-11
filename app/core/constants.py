@@ -38,7 +38,8 @@ MIN_AI_COOLDOWN_SECONDS = 0  # 0 = no cooldown
 MAX_AI_COOLDOWN_SECONDS = 3600  # 1 hour maximum
 
 # AI Provider Configuration
-DEFAULT_PROVIDER_MODEL = "gpt-4o-mini"  # Cost optimization: 200x cheaper than gpt-4
+DEFAULT_GEMINI_PROVIDER_MODEL = "gemini-2.5-flash-lite"
+DEFAULT_OPENAI_PROVIDER_MODEL = "gpt-4o-mini" 
 DEFAULT_PROVIDER_TEMPERATURE = 0.7
 DEFAULT_PROVIDER_MAX_TOKENS = 1024
 

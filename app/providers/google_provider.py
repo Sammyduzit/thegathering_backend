@@ -12,6 +12,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.core.constants import (
     DEFAULT_PROVIDER_MAX_TOKENS,
+    DEFAULT_GEMINI_PROVIDER_MODEL,
     DEFAULT_PROVIDER_TEMPERATURE,
 )
 from app.interfaces.ai_provider import AIProviderError, IAIProvider
@@ -25,7 +26,7 @@ class GoogleProvider(IAIProvider):
     def __init__(
         self,
         api_key: str,
-        model_name: str = "gemini-1.5-flash",
+        model_name: str = DEFAULT_GEMINI_PROVIDER_MODEL,
         default_temperature: float = DEFAULT_PROVIDER_TEMPERATURE,
         default_max_tokens: int = DEFAULT_PROVIDER_MAX_TOKENS,
     ):
@@ -33,7 +34,7 @@ class GoogleProvider(IAIProvider):
         Initialize Google Gemini provider.
 
         :param api_key: Google API key
-        :param model_name: Model to use (e.g., 'gemini-1.5-flash', 'gemini-1.5-pro')
+        :param model_name: Model to use (e.g., 'gemini-2.0-flash', 'gemini-2.5-flash')
         :param default_temperature: Default temperature for responses
         :param default_max_tokens: Default max tokens for responses
         """
