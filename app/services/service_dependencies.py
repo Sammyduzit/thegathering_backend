@@ -286,29 +286,60 @@ def get_short_term_memory_service(
     )
 
 
+def get_ltm_ai_provider():
+    """
+    Factory for LTM Fact Extraction Provider (Gemini or OpenAI).
+
+    IMPORTANT: Separate factory from get_ai_provider()!
+    - get_ai_provider(): OpenAI for response generation
+    - get_ltm_ai_provider(): Configurable for LTM extraction
+
+    :return: AI provider instance for LTM extraction
+    :raises RuntimeError: If required API key is not configured
+    """
+    if settings.ltm_provider == "google":
+        if not settings.google_api_key:
+            raise RuntimeError(
+                "LTM_PROVIDER is set to 'google' but GOOGLE_API_KEY is not configured. "
+                "Please set GOOGLE_API_KEY in your environment or change LTM_PROVIDER to 'openai'."
+            )
+        from app.providers.google_provider import GoogleProvider
+        return GoogleProvider(
+            api_key=settings.google_api_key,
+            model_name=settings.ltm_extraction_model,
+        )
+    else:
+        if not settings.openai_api_key:
+            raise RuntimeError(
+                "LTM_PROVIDER is set to 'openai' but OPENAI_API_KEY is not configured. "
+                "Please set OPENAI_API_KEY in your environment."
+            )
+        return OpenAIProvider(
+            api_key=settings.openai_api_key,
+            model_name=settings.ltm_extraction_model,
+        )
+
+
 def get_long_term_memory_service(
     memory_repo: IAIMemoryRepository = Depends(get_ai_memory_repository),
-    message_repo: IMessageRepository = Depends(get_message_repository),
     embedding_service: IEmbeddingService = Depends(get_embedding_service),
-    chunking_service: TextChunkingService = Depends(get_text_chunking_service),
     keyword_extractor: IKeywordExtractor = Depends(get_keyword_extractor),
+    ltm_ai_provider=Depends(get_ltm_ai_provider),
 ) -> LongTermMemoryService:
     """
     Create LongTermMemoryService instance.
 
     :param memory_repo: AI memory repository instance
-    :param message_repo: Message repository instance
     :param embedding_service: Embedding service instance
-    :param chunking_service: Text chunking service instance
     :param keyword_extractor: Keyword extractor instance
+    :param ltm_ai_provider: LTM AI provider for fact extraction
     :return: LongTermMemoryService instance
     """
     return LongTermMemoryService(
         memory_repo=memory_repo,
-        message_repo=message_repo,
         embedding_service=embedding_service,
-        chunking_service=chunking_service,
         keyword_extractor=keyword_extractor,
+        ai_provider=ltm_ai_provider,
     )
 
 

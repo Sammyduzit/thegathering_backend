@@ -449,19 +449,19 @@ async def create_long_term_memory_task(
     conversation_id: int,
 ) -> dict:
     """
-    ARQ task: Create long-term memory archive from finalized conversation.
+    ARQ task: Create long-term memory from short-term chunks via LLM fact extraction.
 
     This task:
-    - Fetches ALL participants from conversation
-    - Fetches ALL messages from conversation
-    - Chunks text
-    - Generates embeddings (batch)
-    - Creates multiple AIMemory entries (one per chunk) with all participant user IDs
+    - Fetches ALL human participant user IDs from conversation
+    - Fetches STM chunks for this AI entity and conversation
+    - Extracts facts from each chunk via LLM
+    - Creates individual LTM entries (1 Fact = 1 LTM Entry = 1 Embedding)
+    - Deletes STM chunks only after successful LTM creation
 
     :param ctx: ARQ context with db_manager
     :param ai_entity_id: AI entity ID
     :param conversation_id: Conversation ID to archive
-    :return: Dict with memory count and IDs on success
+    :return: Dict with memory count, STM chunks processed, and deleted count
     """
     job_id = str(uuid4())
     db_session_context.set(job_id)
@@ -470,7 +470,6 @@ async def create_long_term_memory_task(
 
     try:
         async for session in db_manager.get_session():
-            message_repo = MessageRepository(session)
             memory_repo = AIMemoryRepository(session)
             conversation_repo = ConversationRepository(session)
 
@@ -483,39 +482,97 @@ async def create_long_term_memory_task(
                     ai_entity_id=ai_entity_id,
                     conversation_id=conversation_id,
                 )
-                return {"memory_count": 0, "memory_ids": []}
+                return {"memory_count": 0, "stm_chunks_processed": 0, "stm_chunks_deleted": 0}
 
-            # Initialize services (provider selected via settings.embedding_provider)
+            # Fetch STM chunks for this entity and conversation
+            stm_chunks = await memory_repo.get_short_term_chunks(
+                conversation_id=conversation_id,
+                entity_id=ai_entity_id,
+            )
+
+            if not stm_chunks:
+                logger.info(
+                    "long_term_memory_skipped_no_stm_chunks",
+                    ai_entity_id=ai_entity_id,
+                    conversation_id=conversation_id,
+                )
+                return {"memory_count": 0, "stm_chunks_processed": 0, "stm_chunks_deleted": 0}
+
+            # Initialize LTM AI Provider (Google Gemini or OpenAI)
+            if settings.ltm_provider == "google":
+                if not settings.google_api_key:
+                    raise RuntimeError(
+                        "LTM_PROVIDER is set to 'google' but GOOGLE_API_KEY is not configured"
+                    )
+                from app.providers.google_provider import GoogleProvider
+                ltm_ai_provider = GoogleProvider(
+                    api_key=settings.google_api_key,
+                    model_name=settings.ltm_extraction_model,
+                )
+            else:
+                if not settings.openai_api_key:
+                    raise RuntimeError(
+                        "LTM_PROVIDER is set to 'openai' but OPENAI_API_KEY is not configured"
+                    )
+                from app.providers.openai_provider import OpenAIProvider
+                ltm_ai_provider = OpenAIProvider(
+                    api_key=settings.openai_api_key,
+                    model_name=settings.ltm_extraction_model,
+                )
+
+            # Initialize services
             embedding_service = create_embedding_service()
-            chunking_service = TextChunkingService()
             keyword_extractor = create_keyword_extractor()
             long_term_service = LongTermMemoryService(
                 memory_repo=memory_repo,
-                message_repo=message_repo,
                 embedding_service=embedding_service,
-                chunking_service=chunking_service,
                 keyword_extractor=keyword_extractor,
+                ai_provider=ltm_ai_provider,
             )
 
-            # Create long-term archive with all participant user IDs
-            memories = await long_term_service.create_long_term_archive(
-                entity_id=ai_entity_id,
-                user_ids=user_ids,
-                conversation_id=conversation_id,
-            )
+            # Fact-based extraction (transactional)
+            deleted_count = 0  # Default for error case
+            try:
+                ltm_memories = await long_term_service.create_long_term_from_chunks(
+                    entity_id=ai_entity_id,
+                    user_ids=user_ids,
+                    conversation_id=conversation_id,
+                    stm_chunks=stm_chunks,
+                )
 
-            logger.info(
-                "long_term_memory_created",
-                ai_entity_id=ai_entity_id,
-                user_ids=user_ids,
-                conversation_id=conversation_id,
-                memory_count=len(memories),
-            )
+                # Only delete STM chunks after successful LTM creation
+                deleted_count = await memory_repo.delete_short_term_chunks(
+                    conversation_id=conversation_id,
+                    entity_id=ai_entity_id,
+                )
 
-            return {
-                "memory_count": len(memories),
-                "memory_ids": [m.id for m in memories],
-            }
+                logger.info(
+                    "long_term_memory_created_from_stm_chunks",
+                    ai_entity_id=ai_entity_id,
+                    user_ids=user_ids,
+                    conversation_id=conversation_id,
+                    memory_count=len(ltm_memories),
+                    stm_chunks_processed=len(stm_chunks),
+                    stm_chunks_deleted=deleted_count,
+                )
+
+                return {
+                    "memory_count": len(ltm_memories),
+                    "memory_ids": [m.id for m in ltm_memories],
+                    "stm_chunks_processed": len(stm_chunks),
+                    "stm_chunks_deleted": deleted_count,
+                }
+
+            except Exception as e:
+                # STM kept for retry
+                logger.error(
+                    "ltm_conversion_failed_stm_kept",
+                    error=str(e),
+                    ai_entity_id=ai_entity_id,
+                    conversation_id=conversation_id,
+                    stm_deleted=deleted_count,
+                )
+                raise  # ARQ will retry
 
     except Exception as e:
         logger.error(
