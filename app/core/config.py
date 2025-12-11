@@ -67,6 +67,13 @@ class Settings(BaseSettings):
     # TTL for short-term memories (in days)
     short_term_ttl_days: int = 7
 
+    # Long-Term Memory Configuration
+    ltm_provider: Literal["openai", "google"] = "google"
+    ltm_extraction_model: str = "gemini-1.5-flash"
+    ltm_extraction_temperature: float = 0.3
+    ltm_max_facts_per_chunk: int = 10
+    ltm_min_importance_threshold: float = 0.3
+
     # RRF (Reciprocal Rank Fusion) Configuration
     rrf_constant_k: int = 60  # Standard RRF constant for rank fusion
 

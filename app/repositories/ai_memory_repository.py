@@ -215,3 +215,30 @@ class AIMemoryRepository(IAIMemoryRepository):
         await self.db.commit()
 
         return delete_chunks_result.rowcount or 0
+
+    async def get_ltm_fact(
+        self,
+        entity_id: int,
+        conversation_id: int,
+        chunk_index: int,
+        fact_hash: str,
+    ) -> AIMemory | None:
+        """
+        Idempotence check for LTM facts (hash-based, stable).
+
+        Query filters:
+        - entity_id, conversation_id
+        - memory_metadata.type = "long_term"
+        - memory_metadata.chunk_index
+        - memory_metadata.fact_hash (SHA256 of fact.text)
+        """
+        ltm_fact_query = select(AIMemory).where(
+            AIMemory.entity_id == entity_id,
+            AIMemory.conversation_id == conversation_id,
+            AIMemory.memory_metadata["type"].as_string() == "long_term",
+            AIMemory.memory_metadata["chunk_index"].as_integer() == chunk_index,
+            AIMemory.memory_metadata["fact_hash"].as_string() == fact_hash,
+        )
+
+        ltm_fact_result = await self.db.execute(ltm_fact_query)
+        return ltm_fact_result.scalar_one_or_none()

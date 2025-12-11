@@ -64,8 +64,14 @@ class ShortTermMemoryService(BaseMemoryService):
                 "message_count": len(chunk_messages),
                 "messages": [
                     {
-                        "sender_user_id": m.sender_user_id,
-                        "sender_ai_id": m.sender_ai_id,
+                        "message_id": m.id,  # For audit trail
+                        "sender_name": (
+                            m.sender_user.username if m.sender_user
+                            else m.sender_ai.username if m.sender_ai
+                            else "Unknown"
+                        ),
+                        "sender_user_id": m.sender_user_id,  # Keep for reference
+                        "sender_ai_id": m.sender_ai_id,  # Keep for reference
                         "content": m.content,
                     }
                     for m in chunk_messages  # Store ALL messages in chunk!
