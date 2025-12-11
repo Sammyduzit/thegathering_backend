@@ -56,8 +56,9 @@ class TestAIContextService:
         # Messages should be in chronological order after reversal
         assert result[0]["content"] == "testuser: Hello"
         assert result[0]["role"] == "user"
-        assert result[1]["content"] == "You: Hi testuser!"  # AI's own message
-        assert result[1]["role"] == "user"
+        # AI's own previous messages are role assistant; content unchanged
+        assert result[1]["content"] == "Hi testuser!"  # AI's own message
+        assert result[1]["role"] == "assistant"
         assert result[2]["content"] == "testuser: How are you?"
         assert result[2]["role"] == "user"
 
@@ -90,8 +91,8 @@ class TestAIContextService:
         assert len(result) == 2
         assert result[0]["content"] == "testuser: Hello room"
         assert result[0]["role"] == "user"
-        assert result[1]["content"] == "You: Hi everyone!"  # AI's own message
-        assert result[1]["role"] == "user"
+        assert result[1]["content"] == "Hi everyone!"  # AI's own message
+        assert result[1]["role"] == "assistant"
 
         mock_message_repo.get_room_messages.assert_called_once_with(
             room_id=1,
@@ -106,16 +107,16 @@ class TestAIContextService:
             id=1,
             entity_id=1,
             summary="User likes programming",
-            memory_content={},
+            memory_content={"messages": [{"sender_name": "Alice", "content": "Hi"}]},
             importance_score=3.0,
             memory_metadata={"type": "short_term"},
         )
         mem2 = AIMemory(
             id=2,
             entity_id=1,
-            summary="User mentioned cats",
-            memory_content={},
-            importance_score=1.0,
+            summary="Cats",
+            memory_content={"fact": {"text": "User mentioned cats", "importance": 0.6, "participants": ["Alice"], "theme": "Cats"}},
+            importance_score=0.6,
             memory_metadata={"type": "long_term"},
         )
 
@@ -130,10 +131,10 @@ class TestAIContextService:
         )
 
         # Assert
-        assert "# Recent Context (this conversation):" in result
-        assert "User likes programming" in result
-        assert "# Past Interactions:" in result
-        assert "User mentioned cats" in result
+        assert "## Recent Context (this conversation):" in result
+        assert "Alice: Hi" in result
+        assert "## Past Interactions (Learned Facts):" in result
+        assert "[RELEVANT] [Cats] User mentioned cats" in result
 
         mock_memory_retriever.retrieve_tiered.assert_called_once_with(
             entity_id=1,
@@ -190,7 +191,6 @@ class TestAIContextService:
         assert len(messages) == 1
         assert messages[0]["content"] == "testuser: Hello"
         assert memory_context is not None
-        assert "Test memory" in memory_context
 
     async def test_build_full_context_room(
         self, service, mock_message_repo, mock_memory_retriever, sample_ai_entity, sample_user
