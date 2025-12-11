@@ -319,12 +319,9 @@ async def delete_conversation(
         conversation_id=conversation_id,
     )
 
-    # Enqueue long-term memory creation for AI participants
+    # Enqueue long-term memory creation for all AI participants
     participants = conversation_detail.get("participants", [])
-    ai_participant = next((p for p in participants if p.is_ai), None)
-
-    if ai_participant:
-        await conversation_service._enqueue_long_term_memory_for_ai(
-            conversation_id=conversation_id,
-            ai_entity_id=ai_participant.id,
-        )
+    await conversation_service.enqueue_long_term_memory_for_all_ai(
+        conversation_id=conversation_id,
+        participants=participants,
+    )

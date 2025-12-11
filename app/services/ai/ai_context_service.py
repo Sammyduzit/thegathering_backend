@@ -229,24 +229,39 @@ class AIContextService:
                 if mem.memory_content and "messages" in mem.memory_content:
                     messages = mem.memory_content["messages"]
                     for msg in messages:  # All messages, full content
-                        sender_info = f"User {msg.get('sender_user_id')}" if msg.get('sender_user_id') else "You"
+                        sender_name = msg.get("sender_name", "Unknown")
                         content = msg.get("content", "")  # FULL content, no truncation!
-                        lines.append(f"  - {sender_info}: {content}")
+                        lines.append(f"  - {sender_name}: {content}")
                 else:
                     # Fallback to summary if messages not available
                     lines.append(f"  - {mem.summary}")
 
                 lines.append("")
 
-        # Long-term
+        # Long-term (learned facts)
         if long_term:
-            lines.append("## Past Interactions:")
-            lines.append(
-                "Draw on these when relevant to show you remember previous conversations. "
-                "Don't force references, but acknowledge shared history when appropriate."
-            )
+            lines.append("## Past Interactions (Learned Facts):")
+            lines.append("Draw on these facts when relevant. Markers: [CRITICAL] / [RELEVANT]")
+            lines.append("")
+
             for mem in long_term:
-                lines.append(f"- {mem.summary}")
+                # Defensive: Check if fact exists (guard against corrupted/old LTM entries)
+                fact = mem.memory_content.get("fact")
+                if not fact or not fact.get("text"):
+                    continue
+
+                theme = fact.get("theme", mem.summary)
+                text = fact["text"]
+                importance = fact.get("importance", 0.5)
+
+                # ASCII Importance Marker (terminal-friendly)
+                if importance >= 0.8:
+                    lines.append(f"[CRITICAL] [{theme}] {text}")
+                elif importance >= 0.5:
+                    lines.append(f"[RELEVANT] [{theme}] {text}")
+                else:
+                    lines.append(f"[{theme}] {text}")
+
             lines.append("")
 
         # Personality

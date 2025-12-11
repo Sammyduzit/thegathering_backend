@@ -486,6 +486,28 @@ class ConversationService:
             conversation_id,
         )
 
+    async def enqueue_long_term_memory_for_all_ai(
+        self,
+        conversation_id: int,
+        participants: list,
+    ) -> None:
+        """
+        Enqueue long-term memory creation for all AI participants in conversation.
+
+        This is typically called when a conversation is archived. It loops through
+        all participants, finds AI entities, and enqueues a memory task for each.
+
+        :param conversation_id: The conversation being archived
+        :param participants: List of conversation participants (with is_ai property)
+        """
+        ai_participants = [p for p in participants if p.is_ai]
+
+        for ai_participant in ai_participants:
+            await self._enqueue_long_term_memory_for_ai(
+                conversation_id=conversation_id,
+                ai_entity_id=ai_participant.id,
+            )
+
     async def get_conversation_detail(self, current_user: User, conversation_id: int) -> dict:
         """
         Get detailed conversation information including participants, permissions, and message metadata.
