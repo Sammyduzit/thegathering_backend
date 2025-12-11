@@ -80,9 +80,9 @@ class TestVectorMemoryRetriever:
         embedding_service = retriever["embedding_service"]
 
         embedding_service.embed_text.return_value = [0.1]
-        vector_results = [self._memory(1, "short_term")]
+        vector_results = [self._memory(1, "long_term")]
         memory_repo.vector_search.return_value = vector_results
-        memory_repo.search_by_keywords.return_value = [self._memory(2, "short_term")]
+        memory_repo.search_by_keywords.return_value = [self._memory(2, "long_term")]
 
         r._extract_keywords = AsyncMock(return_value=["topic"])
         r._filter_keyword_results = MagicMock(return_value=["filtered"])
@@ -93,7 +93,7 @@ class TestVectorMemoryRetriever:
             query="hello world",
             user_id=7,
             conversation_id=9,
-            memory_type="short_term",
+            memory_type="long_term",
             limit=3,
         )
 
@@ -106,7 +106,7 @@ class TestVectorMemoryRetriever:
             user_id=7,
             conversation_id=9,
             exclude_conversation_id=None,
-            memory_type="short_term",
+            memory_type="long_term",
         )
         r._rrf_fusion.assert_called_once_with(
             vector_results=vector_results,

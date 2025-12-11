@@ -60,6 +60,10 @@ async def test_stm_to_ltm_flow(db_session):
     await db_session.refresh(ai_entity)
 
     # Create a few conversation messages
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from app.models.message import Message
+
     messages = []
     for i in range(3):
         msg = await MessageFactory.create_conversation_message(
@@ -69,6 +73,17 @@ async def test_stm_to_ltm_flow(db_session):
             content=f"Message {i} about Rust",
         )
         messages.append(msg)
+
+    # Reload messages with eager loading for sender relationships
+    message_ids = [m.id for m in messages]
+    query = (
+        select(Message)
+        .where(Message.id.in_(message_ids))
+        .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
+        .order_by(Message.created_at)
+    )
+    result = await db_session.execute(query)
+    messages = list(result.scalars().all())
 
     memory_repo = AIMemoryRepository(db_session)
 

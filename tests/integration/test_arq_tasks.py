@@ -163,18 +163,50 @@ async def test_create_long_term_memory_task_happy_path(
     ai_entity_factory,
     monkeypatch,
 ):
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from app.models.message import Message
+    from app.services.memory.short_term_memory_service import ShortTermMemoryService
+
     user = await user_factory.create(db_session)
     conversation = await conversation_factory.create_private_conversation(db_session)
     conv_repo = ConversationRepository(db_session)
     await conv_repo.add_participant(conversation_id=conversation.id, user_id=user.id)
     ai_entity = await ai_entity_factory.create_online(db_session)
 
-    # Two messages to ensure chunking has content
-    await message_factory.create_conversation_message(
-        db_session, sender=user, conversation=conversation, content="First message for memory."
+    # Create messages
+    messages = []
+    for i in range(2):
+        msg = await message_factory.create_conversation_message(
+            db_session, sender=user, conversation=conversation, content=f"Message {i} for memory."
+        )
+        messages.append(msg)
+
+    # Reload messages with eager loading
+    message_ids = [m.id for m in messages]
+    query = (
+        select(Message)
+        .where(Message.id.in_(message_ids))
+        .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
+        .order_by(Message.created_at)
     )
-    await message_factory.create_conversation_message(
-        db_session, sender=user, conversation=conversation, content="Second message for memory."
+    result_query = await db_session.execute(query)
+    messages = list(result_query.scalars().all())
+
+    # Create STM chunk
+    memory_repo = AIMemoryRepository(db_session)
+    stm_service = ShortTermMemoryService(
+        memory_repo=memory_repo,
+        keyword_extractor=FakeKeywordExtractor(),
+    )
+    await stm_service.create_short_term_chunk(
+        entity_id=ai_entity.id,
+        user_ids=[user.id],
+        conversation_id=conversation.id,
+        chunk_messages=messages,
+        chunk_index=0,
+        start_idx=0,
+        end_idx=len(messages) - 1,
     )
 
     _monkeypatch_ai_stack(
@@ -192,7 +224,7 @@ async def test_create_long_term_memory_task_happy_path(
     )
 
     assert result["memory_count"] > 0
-    memory_repo = AIMemoryRepository(db_session)
+    assert result["stm_chunks_processed"] > 0
     memories = await memory_repo.get_entity_memories(ai_entity.id, limit=10)
     assert memories
     assert user.id in memories[0].user_ids
@@ -223,7 +255,7 @@ async def test_create_long_term_memory_task_skips_without_users(
         conversation_id=conversation.id,
     )
 
-    assert result == {"memory_count": 0, "memory_ids": []}
+    assert result == {"memory_count": 0, "stm_chunks_processed": 0, "stm_chunks_deleted": 0}
 
 
 @pytest.mark.integration
@@ -236,14 +268,45 @@ async def test_create_long_term_memory_task_retries_on_embedding_error(
     ai_entity_factory,
     monkeypatch,
 ):
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from app.models.message import Message
+    from app.services.memory.short_term_memory_service import ShortTermMemoryService
+
     user = await user_factory.create(db_session)
     conversation = await conversation_factory.create_private_conversation(db_session)
     conv_repo = ConversationRepository(db_session)
     await conv_repo.add_participant(conversation_id=conversation.id, user_id=user.id)
     ai_entity = await ai_entity_factory.create_online(db_session)
 
-    await message_factory.create_conversation_message(
+    # Create message
+    msg = await message_factory.create_conversation_message(
         db_session, sender=user, conversation=conversation, content="Message to embed."
+    )
+
+    # Reload message with eager loading
+    query = (
+        select(Message)
+        .where(Message.id == msg.id)
+        .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
+    )
+    result_query = await db_session.execute(query)
+    message = result_query.scalar_one()
+
+    # Create STM chunk
+    memory_repo = AIMemoryRepository(db_session)
+    stm_service = ShortTermMemoryService(
+        memory_repo=memory_repo,
+        keyword_extractor=FakeKeywordExtractor(),
+    )
+    await stm_service.create_short_term_chunk(
+        entity_id=ai_entity.id,
+        user_ids=[user.id],
+        conversation_id=conversation.id,
+        chunk_messages=[message],
+        chunk_index=0,
+        start_idx=0,
+        end_idx=0,
     )
 
     _monkeypatch_ai_stack(
