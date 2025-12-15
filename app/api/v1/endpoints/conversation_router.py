@@ -172,6 +172,7 @@ async def get_conversation_detail(
     """
     Get detailed conversation information.
     Includes full participant details, permissions, message count, and latest message.
+    Archived conversations are also available to participants/admins.
     :param conversation_id: ID of the conversation
     :param current_user: Current authenticated user
     :param conversation_service: Service instance handling conversation logic

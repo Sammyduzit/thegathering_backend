@@ -208,7 +208,12 @@ class ConversationService:
         :param page_size: Messages per page
         :return: Tuple of (messages, total_count)
         """
-        await self._validate_conversation_access(current_user.id, conversation_id)
+        await self._validate_conversation_access(
+            current_user.id,
+            conversation_id,
+            current_user=current_user,
+            allow_inactive=True,
+        )
 
         messages, total_count = await self.message_repo.get_conversation_messages(
             conversation_id=conversation_id,
@@ -267,7 +272,7 @@ class ConversationService:
         :param conversation_id: Conversation ID
         :return: List of formatted participant data
         """
-        await self._validate_conversation_access(current_user.id, conversation_id)
+        await self._validate_conversation_access(current_user.id, conversation_id, allow_inactive=True)
 
         participants = await self.conversation_repo.get_participants(conversation_id)
 
@@ -314,16 +319,28 @@ class ConversationService:
 
         return human_participants, ai_participants
 
-    async def _validate_conversation_access(self, user_id: int, conversation_id: int) -> Conversation:
+    async def _validate_conversation_access(
+        self,
+        user_id: int,
+        conversation_id: int,
+        current_user: User | None = None,
+        allow_inactive: bool = False,
+    ) -> Conversation:
         """
         Validate conversation exists and user has access.
         :param user_id: User ID
         :param conversation_id: Conversation ID
+        :param current_user: Optional user object (for admin bypass)
+        :param allow_inactive: Allow access to archived conversations
         :return: Conversation object
         """
-        conversation = await self.conversation_repo.get_by_id(conversation_id)
+        conversation = await self.conversation_repo.get_by_id(conversation_id, include_inactive=allow_inactive)
         if not conversation:
             raise ConversationNotFoundException(conversation_id)
+
+        # Admins can bypass participant check (useful for admin memory views)
+        if current_user and current_user.is_admin:
+            return conversation
 
         if not await self.conversation_repo.is_participant(conversation_id, user_id):
             raise NotConversationParticipantException()
@@ -516,10 +533,15 @@ class ConversationService:
         :return: Detailed conversation data formatted for frontend
         """
         # Validate access
-        await self._validate_conversation_access(current_user.id, conversation_id)
+        await self._validate_conversation_access(
+            current_user.id,
+            conversation_id,
+            current_user=current_user,
+            allow_inactive=True,
+        )
 
         # Get conversation data
-        conversation = await self.conversation_repo.get_by_id(conversation_id)
+        conversation = await self.conversation_repo.get_by_id(conversation_id, include_inactive=True)
         if not conversation:
             raise ConversationNotFoundException(f"Conversation {conversation_id} not found")
 
@@ -604,7 +626,7 @@ class ConversationService:
         :raises NotConversationParticipantException: If user is not a participant
         """
         # Get conversation
-        conversation = await self.conversation_repo.get_by_id(conversation_id)
+        conversation = await self.conversation_repo.get_by_id(conversation_id, include_inactive=True)
         if not conversation:
             raise ConversationNotFoundException(f"Conversation {conversation_id} not found")
 

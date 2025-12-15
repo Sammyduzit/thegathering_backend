@@ -83,9 +83,11 @@ class ConversationRepository(IConversationRepository):
         """
         super().__init__(db)
 
-    async def get_by_id(self, id: int) -> Conversation | None:
-        """Get conversation by ID."""
-        query = select(Conversation).where(and_(Conversation.id == id, Conversation.is_active.is_(True)))
+    async def get_by_id(self, id: int, include_inactive: bool = False) -> Conversation | None:
+        """Get conversation by ID (optionally include archived)."""
+        query = select(Conversation).where(Conversation.id == id)
+        if not include_inactive:
+            query = query.where(Conversation.is_active.is_(True))
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 

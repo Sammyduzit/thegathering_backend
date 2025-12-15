@@ -8,7 +8,7 @@
 services:
   db:
     image: pgvector/pgvector:pg16
-    container_name: the_gathering_db
+    container_name: the_gathering_production_db
     environment:
       # DEVELOPMENT ONLY - DO NOT USE IN PRODUCTION
       # For production, use strong passwords from .env file
@@ -28,7 +28,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: the_gathering_redis
+    container_name: the_gathering_production_redis
     ports:
       - "6379:6379"
     volumes:
@@ -43,7 +43,7 @@ services:
 
   arq_worker:
     build: .
-    container_name: the_gathering_arq_worker
+    container_name: the_gathering_production_arq_worker
     command: arq app.workers.WorkerSettings
     depends_on:
       db:
@@ -62,7 +62,8 @@ services:
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
       - APP_NAME=${APP_NAME:-The Gathering}
     volumes:
-      - .:/app
+      # Mount source into the container's working directory (/code) so the worker runs the latest code
+      - .:/code
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import redis; r=redis.from_url(\"redis://redis:6379\"); r.ping()'"]

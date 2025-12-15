@@ -344,3 +344,72 @@ async def test_create_long_term_memory_task_retries_on_embedding_error(
             ai_entity_id=ai_entity.id,
             conversation_id=conversation.id,
         )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_create_long_term_memory_task_creates_missing_stm_chunks(
+    db_session,
+    user_factory,
+    conversation_factory,
+    message_factory,
+    ai_entity_factory,
+    monkeypatch,
+):
+    """Ensure catch-up STM chunking runs when no STM exists (partial chunk)."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from app.models.message import Message
+    from app.repositories.ai_memory_repository import AIMemoryRepository
+
+    user = await user_factory.create(db_session)
+    conversation = await conversation_factory.create_private_conversation(db_session)
+    conv_repo = ConversationRepository(db_session)
+    await conv_repo.add_participant(conversation_id=conversation.id, user_id=user.id)
+    ai_entity = await ai_entity_factory.create_online(db_session)
+
+    # Create few messages (< SHORT_TERM_CHUNK_SIZE) and do NOT create STM chunk
+    msgs = []
+    for i in range(3):
+        msg = await message_factory.create_conversation_message(
+            db_session, sender=user, conversation=conversation, content=f"Msg {i}"
+        )
+        msgs.append(msg)
+
+    # Reload messages to include sender relationships and stable ordering
+    msg_ids = [m.id for m in msgs]
+    query = (
+        select(Message)
+        .where(Message.id.in_(msg_ids))
+        .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
+        .order_by(Message.sent_at)
+    )
+    result_query = await db_session.execute(query)
+    _ = list(result_query.scalars().all())  # noqa: F841 - ensures data is loaded
+
+    _monkeypatch_ai_stack(
+        monkeypatch,
+        ltm_provider=FakeLTMProvider(),
+        embedding_service=FakeLongEmbeddingService(),
+        keyword_extractor=FakeKeywordExtractor(),
+    )
+
+    ctx = {"db_manager": FakeDbManager(db_session), "job_try": 1}
+
+    result = await create_long_term_memory_task(
+        ctx,
+        ai_entity_id=ai_entity.id,
+        conversation_id=conversation.id,
+    )
+
+    assert result["memory_count"] > 0
+    assert result["stm_chunks_processed"] > 0
+
+    memory_repo = AIMemoryRepository(db_session)
+    memories = await memory_repo.get_entity_memories(ai_entity.id, limit=5)
+    assert memories
+    assert memories[0].memory_metadata["type"] == "long_term"
+
+    # STM chunks should be deleted after successful LTM creation
+    remaining_stm = await memory_repo.get_short_term_chunks(conversation_id=conversation.id, entity_id=ai_entity.id)
+    assert remaining_stm == []

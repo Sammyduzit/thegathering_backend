@@ -91,7 +91,11 @@ class Settings(BaseSettings):
     @property
     def is_ai_available(self) -> bool:
         """Check if AI features can be enabled."""
-        return self.ai_features_enabled and self.openai_api_key is not None
+        # Consider both OpenAI and Google keys so ARQ pool can run when only Gemini is configured.
+        if not self.ai_features_enabled:
+            return False
+
+        return bool(self.openai_api_key or self.google_api_key)
 
 
 settings = Settings()

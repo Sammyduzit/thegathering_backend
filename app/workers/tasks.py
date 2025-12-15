@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import structlog
 from arq import Retry
+import math
 
 from app.core.arq_db_manager import ARQDatabaseManager, db_session_context
 from app.core.config import settings
@@ -25,6 +26,83 @@ from app.services.text_processing.keyword_extractor_factory import create_keywor
 from app.services.text_processing.text_chunking_service import TextChunkingService
 
 logger = structlog.get_logger(__name__)
+
+
+async def _catch_up_short_term_chunks(
+    memory_repo: AIMemoryRepository,
+    message_repo: MessageRepository,
+    ai_entity_id: int,
+    conversation_id: int,
+    user_ids: list[int],
+) -> list:
+    """
+    Ensure all required STM chunks exist (full + partial) before LTM extraction.
+
+    Returns the refreshed list of STM chunks after filling gaps.
+    """
+    from app.core.constants import SHORT_TERM_CHUNK_SIZE
+
+    all_messages, _ = await message_repo.get_conversation_messages(
+        conversation_id=conversation_id,
+        page=1,
+        page_size=1000,  # Matches inline STM chunking limit
+    )
+    conversation_messages = [m for m in all_messages if m.message_type != "system"]
+    total_messages = len(conversation_messages)
+
+    existing_stm_chunks = await memory_repo.get_short_term_chunks(
+        conversation_id=conversation_id,
+        entity_id=ai_entity_id,
+    )
+    existing_indices = {
+        chunk.memory_metadata.get("chunk_index")
+        for chunk in existing_stm_chunks
+        if chunk.memory_metadata and chunk.memory_metadata.get("chunk_index") is not None
+    }
+
+    needed_chunks = math.ceil(total_messages / SHORT_TERM_CHUNK_SIZE) if total_messages else 0
+
+    if needed_chunks > len(existing_indices):
+        keyword_extractor = create_keyword_extractor()
+        short_term_service = ShortTermMemoryService(
+            memory_repo=memory_repo,
+            keyword_extractor=keyword_extractor,
+        )
+
+        for chunk_idx in range(needed_chunks):
+            if chunk_idx in existing_indices:
+                continue
+
+            start_idx = chunk_idx * SHORT_TERM_CHUNK_SIZE
+            end_idx = min(start_idx + SHORT_TERM_CHUNK_SIZE - 1, total_messages - 1)
+            chunk_messages = conversation_messages[start_idx : end_idx + 1]
+
+            if not chunk_messages:
+                continue
+
+            await short_term_service.create_short_term_chunk(
+                entity_id=ai_entity_id,
+                user_ids=user_ids,
+                conversation_id=conversation_id,
+                chunk_messages=chunk_messages,
+                chunk_index=chunk_idx,
+                start_idx=start_idx,
+                end_idx=end_idx,
+            )
+
+            logger.info(
+                "stm_chunk_catch_up_created",
+                ai_entity_id=ai_entity_id,
+                conversation_id=conversation_id,
+                chunk_index=chunk_idx,
+                message_count=len(chunk_messages),
+                message_range=f"{start_idx}-{end_idx}",
+            )
+
+    return await memory_repo.get_short_term_chunks(
+        conversation_id=conversation_id,
+        entity_id=ai_entity_id,
+    )
 
 
 async def _lookup_ai_entity(
@@ -472,6 +550,7 @@ async def create_long_term_memory_task(
         async for session in db_manager.get_session():
             memory_repo = AIMemoryRepository(session)
             conversation_repo = ConversationRepository(session)
+            message_repo = MessageRepository(session)
 
             # Fetch all human participant user IDs
             user_ids = await _get_conversation_user_ids(conversation_repo, conversation_id)
@@ -484,10 +563,13 @@ async def create_long_term_memory_task(
                 )
                 return {"memory_count": 0, "stm_chunks_processed": 0, "stm_chunks_deleted": 0}
 
-            # Fetch STM chunks for this entity and conversation
-            stm_chunks = await memory_repo.get_short_term_chunks(
+            # Catch-up STM chunking guard: fill missing chunks (including partial)
+            stm_chunks = await _catch_up_short_term_chunks(
+                memory_repo=memory_repo,
+                message_repo=message_repo,
+                ai_entity_id=ai_entity_id,
                 conversation_id=conversation_id,
-                entity_id=ai_entity_id,
+                user_ids=user_ids,
             )
 
             if not stm_chunks:
