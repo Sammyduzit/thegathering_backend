@@ -76,10 +76,17 @@ class AIEntityService:
         response_probability: float | None = None,
         cooldown_seconds: int | None = None,
         config: dict | None = None,
+        avatar_url: str | None = None,
     ) -> AIEntity:
         """Create new AI entity with validation."""
         if await self.ai_entity_repo.username_exists(username):
             raise DuplicateResourceException("AI entity", username)
+
+        # Generate avatar if not provided
+        if not avatar_url:
+            from app.services.domain.avatar_service import generate_avatar_url
+
+            avatar_url = await generate_avatar_url(username, style="bottts")
 
         new_entity = AIEntity(
             username=username,
@@ -93,6 +100,7 @@ class AIEntityService:
             response_probability=response_probability,
             cooldown_seconds=cooldown_seconds,
             config=config,
+            avatar_url=avatar_url,
             status=AIEntityStatus.OFFLINE,
         )
 
@@ -112,6 +120,7 @@ class AIEntityService:
         response_probability: float | None = None,
         cooldown_seconds: int | None = None,
         config: dict | None = None,
+        avatar_url: str | None = None,
         status: AIEntityStatus | None = None,
         current_room_id: int | None = ...,  # ... as sentinel: not provided
     ) -> AIEntity:
@@ -145,6 +154,7 @@ class AIEntityService:
             response_probability=response_probability,
             cooldown_seconds=cooldown_seconds,
             config=config,
+            avatar_url=avatar_url,
         )
 
         # Commit changes with optimistic locking for room assignment
@@ -346,6 +356,7 @@ class AIEntityService:
         response_probability: float | None = None,
         cooldown_seconds: int | None = None,
         config: dict | None = None,
+        avatar_url: str | None = None,
     ) -> None:
         """
         Update entity fields if provided.
@@ -388,6 +399,8 @@ class AIEntityService:
             entity.cooldown_seconds = cooldown_seconds
         if config is not None:
             entity.config = config
+        if avatar_url is not None:
+            entity.avatar_url = avatar_url
 
     async def _generate_farewell_message(
         self,

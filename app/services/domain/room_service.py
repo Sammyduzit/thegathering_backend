@@ -236,7 +236,7 @@ class RoomService:
                 {
                     "id": ai_entity.id,
                     "username": ai_entity.username,
-                    "avatar_url": None,  # AI entities don't have avatars
+                    "avatar_url": ai_entity.avatar_url,
                     "status": ai_entity.status.value,
                     "is_ai": True,
                     "last_active": None,  # AI entities don't have last_active

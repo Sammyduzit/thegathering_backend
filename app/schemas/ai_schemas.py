@@ -44,6 +44,7 @@ class AIEntityCreate(BaseModel):
     )
 
     config: dict | None = Field(None, description="Additional LangChain configuration")
+    avatar_url: str | None = Field(None, description="Optional custom avatar URL (auto-generated if null)")
 
 
 class AIEntityUpdate(BaseModel):
@@ -72,6 +73,7 @@ class AIEntityUpdate(BaseModel):
     )
 
     config: dict | None = None
+    avatar_url: str | None = Field(None, description="Update avatar URL")
     status: AIEntityStatus | None = Field(None, description="AI online/offline status")
     current_room_id: int | None = Field(
         None, description="Room assignment (None=leave room, int=assign to room, omit=no change)"
@@ -98,6 +100,7 @@ class AIEntityResponse(BaseModel):
     cooldown_seconds: int | None
 
     config: dict | None
+    avatar_url: str | None
     status: AIEntityStatus
     is_active: bool
     current_room_id: int | None

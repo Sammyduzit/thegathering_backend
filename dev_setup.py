@@ -206,6 +206,10 @@ async def create_test_ai_entities():
                 existing_ai = result.scalar_one_or_none()
 
                 if not existing_ai:
+                    # Generate avatar for AI
+                    avatar_url = await generate_avatar_url(ai_data["username"], style="bottts")
+                    ai_data["avatar_url"] = avatar_url
+
                     new_ai = AIEntity(**ai_data)
                     db.add(new_ai)
                     created_entities.append(ai_data)

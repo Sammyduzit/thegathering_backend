@@ -85,6 +85,7 @@ async def create_ai_entity(
         response_probability=entity_data.response_probability,
         cooldown_seconds=entity_data.cooldown_seconds,
         config=entity_data.config,
+        avatar_url=entity_data.avatar_url,
     )
 
 
@@ -123,6 +124,7 @@ async def update_ai_entity(
         response_probability=entity_data.response_probability,
         cooldown_seconds=entity_data.cooldown_seconds,
         config=entity_data.config,
+        avatar_url=entity_data.avatar_url,
         status=entity_data.status,
         current_room_id=entity_data.current_room_id,
     )

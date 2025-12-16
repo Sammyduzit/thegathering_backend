@@ -82,6 +82,9 @@ class AIEntity(Base):
         JSON().with_variant(JSONB(none_as_null=True), "postgresql"), default=None
     )
 
+    # Avatar URL (DiceBear API)
+    avatar_url: Mapped[str | None] = mapped_column(String(500), default=None)
+
     status: Mapped[AIEntityStatus] = mapped_column(Enum(AIEntityStatus), default=AIEntityStatus.OFFLINE, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

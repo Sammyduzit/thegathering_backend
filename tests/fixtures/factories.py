@@ -317,8 +317,10 @@ class AIFactory(BaseFactory):
     def get_defaults(cls) -> Dict[str, Any]:
         """Default values for AI entity creation."""
         unique_id = str(uuid.uuid4())[:8]
+        username = f"test_ai_{unique_id}"
         return {
-            "username": f"test_ai_{unique_id}",
+            "username": username,
+            "avatar_url": f"https://api.dicebear.com/7.x/bottts/svg?seed={username}",
             "system_prompt": "You are a helpful AI assistant for testing.",
             "model_name": "gpt-4o-mini",
             "temperature": 0.7,
