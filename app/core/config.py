@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     ltm_extraction_model: str = "gemini-2.5-flash-lite"
     ltm_extraction_temperature: float = 0.3
     ltm_max_facts_per_chunk: int = 10
-    ltm_min_importance_threshold: float = 0.3
+    ltm_min_importance_threshold: float = 5.0  # 0-10 scale (LLM output)
     ltm_extraction_max_retries: int = 3  # Number of retries before heuristic fallback
     ltm_extraction_retry_delay: float = 1.0
     # RRF (Reciprocal Rank Fusion) Configuration

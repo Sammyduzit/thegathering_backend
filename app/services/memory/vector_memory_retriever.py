@@ -235,6 +235,10 @@ class VectorMemoryRetriever(BaseMemoryService, IMemoryRetriever):
             # Add weighted RRF score
             memory_scores[memory.id] += weight / (k + rank)
 
+        # Apply importance weighting (0-10 scale -> 1.0-2.0 multiplier)
+        for memory in pool:
+            memory_scores[memory.id] = memory_scores.get(memory.id, 0.0) * self._importance_weight(memory)
+
         # Sort pool by score
         pool_sorted = sorted(pool, key=lambda m: memory_scores.get(m.id, 0.0), reverse=True)
 
@@ -302,6 +306,10 @@ class VectorMemoryRetriever(BaseMemoryService, IMemoryRetriever):
         # Combine and deduplicate
         all_memories = {m.id: m for m in vector_results + keyword_results}
 
+        # Apply importance weighting before sorting
+        for mem_id, memory in all_memories.items():
+            memory_scores[mem_id] = memory_scores.get(mem_id, 0.0) * self._importance_weight(memory)
+
         # Sort by RRF score
         sorted_memories = sorted(
             all_memories.values(),
@@ -335,3 +343,14 @@ class VectorMemoryRetriever(BaseMemoryService, IMemoryRetriever):
             filtered = [m for m in filtered if m.memory_metadata and m.memory_metadata.get("type") == memory_type]
 
         return filtered
+
+    @staticmethod
+    def _importance_weight(memory: AIMemory) -> float:
+        """Convert importance_score (0-10 expected) into multiplier [1.0, 2.0]."""
+        try:
+            score = float(memory.importance_score or 0.0)
+        except (TypeError, ValueError):
+            return 1.0
+
+        score = max(0.0, min(10.0, score))
+        return 1.0 + (score / 10.0)

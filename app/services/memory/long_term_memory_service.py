@@ -195,7 +195,11 @@ class LongTermMemoryService(BaseMemoryService):
             logger.warning("ltm_fact_missing_text_skipping", fact=fact)
             return None
 
-        fact_importance = fact.get("importance", 0.5)  # Default to medium
+        try:
+            fact_importance = float(fact.get("importance", 2.0))  # Default low on 0-10 scale
+        except (TypeError, ValueError):
+            fact_importance = 2.0
+        fact_importance = max(0.0, min(10.0, fact_importance))
         fact_participants = fact.get("participants", [])
         fact_theme = fact.get("theme", "General")
 
@@ -232,6 +236,7 @@ class LongTermMemoryService(BaseMemoryService):
                 "fact": {
                     "text": fact_text,
                     "importance": fact_importance,
+                    "importance_reason": fact.get("importance_reason", ""),
                     "participants": fact_participants,
                     "theme": fact_theme,
                 },
@@ -277,7 +282,7 @@ TEILNEHMER:
 Die Namen aller Teilnehmer (User und KI-Assistenten) sind in den Messages erkennbar.
 
 AUFGABE:
-Extrahiere 0-{settings.ltm_max_facts_per_chunk} bedeutsame Fakten über:
+Extrahiere 0-{settings.ltm_max_facts_per_chunk} bedeutsame, voneinander unabhängige Fakten über:
 1. Alle Teilnehmer (User UND KI-Assistenten)
 2. Diskutierte Themen
 3. Wichtige Aussagen/Meinungen
@@ -288,12 +293,38 @@ AUSGABE-FORMAT (JSON):
   "facts": [
     {{
       "text": "Bob ist Python-Experte mit 10 Jahren Erfahrung",
-      "importance": 0.8,
+      "importance": 9,
+      "importance_reason": "Berufliche Kernkompetenz",
       "participants": ["Bob", "Silas"],
       "theme": "Python Expertise"
     }}
   ]
 }}
+
+BEISPIELE (sortiert nach importance DESC):
+[
+  {{
+    "text": "Alice baut seit 5 Jahren React-Frontends und mag TypeScript",
+    "importance": 9,
+    "importance_reason": "Langjährige Kernkompetenz",
+    "participants": ["Alice"],
+    "theme": "Frontend Skills"
+  }},
+  {{
+    "text": "Bob will nächste Woche an einem KI-Hackathon teilnehmen",
+    "importance": 6,
+    "importance_reason": "Kurzfristiges Ziel/Interesse",
+    "participants": ["Bob"],
+    "theme": "Hackathon"
+  }},
+  {{
+    "text": "Clara hat sich heute für Kaffee bedankt",
+    "importance": 2,
+    "importance_reason": "Höflichkeit/Smalltalk",
+    "participants": ["Clara"],
+    "theme": "Smalltalk"
+  }}
+]
 
 REGELN:
 1. Min 0, Max {settings.ltm_max_facts_per_chunk} Facts
@@ -301,13 +332,17 @@ REGELN:
 3. Kurz & präzise (1-2 Sätze, max 200 Zeichen)
 4. Jeder Fact ist atomisch/eigenständig
 5. Theme: 2-4 Wörter, beschreibt spezifischen Kontext
-6. Importance: 0.0-1.0
-   - 0.8-1.0: Kritisch (Beruf, Expertise, wichtige Präferenzen)
-   - 0.5-0.7: Relevant (Meinungen, Lernfortschritt)
-   - 0.3-0.4: Nebensächlich (casual preferences)
-   - <{settings.ltm_min_importance_threshold}: Ignorieren
-7. Participants: Namen aller beteiligten
-8. Facts über KI-Assistenten sind genauso wichtig wie Facts über User
+6. Importance-Skala: 0-10 (keine Dezimalstellen nötig)
+   - 9-10: Identität/Kernpräferenzen (Beruf, feste Abneigungen, langfristige Ziele) → max 1-2 Facts
+   - 7-8: Wichtige Meinungen/Entscheidungen, regelmäßige Interessen
+   - 4-6: Situativ relevant, kurzfristige Ziele, einmalige Themen
+   - 1-3: Smalltalk/Höflichkeit, beiläufige Erwähnungen
+   - 0: ignorieren
+   - Wenn nichts wirklich wichtig ist: setze alle Facts ≤4
+7. Importance muss zu den Beispielen passen. Sortiere Facts nach importance (höchste zuerst).
+8. importance_reason: Kurzer Satz (max 12 Wörter, keine Füllwörter), warum der Score so gesetzt wurde.
+9. Participants: Namen aller Beteiligten
+10. Facts über KI-Assistenten sind genauso wichtig wie Facts über User
 
 CONVERSATION MESSAGES:
 {formatted_messages}
@@ -347,10 +382,13 @@ Antworte NUR mit JSON, keine zusätzlichen Erklärungen."""
                 if not fact.get("text"):
                     continue
 
+                importance_reason = fact.get("importance_reason", "")
+
                 # Normalize structure with defaults
                 normalized_fact = {
                     "text": fact["text"],
-                    "importance": fact.get("importance", 0.5),  # Default medium
+                    "importance": fact.get("importance", 2.0),  # Default low
+                    "importance_reason": importance_reason,
                     "participants": fact.get("participants", []),
                     "theme": fact.get("theme", "General"),
                 }
@@ -362,9 +400,9 @@ Antworte NUR mit JSON, keine zusätzlichen Erklärungen."""
                 # Ensure importance is a number in valid range
                 try:
                     normalized_fact["importance"] = float(normalized_fact["importance"])
-                    normalized_fact["importance"] = max(0.0, min(1.0, normalized_fact["importance"]))
+                    normalized_fact["importance"] = max(0.0, min(10.0, normalized_fact["importance"]))
                 except (ValueError, TypeError):
-                    normalized_fact["importance"] = 0.5
+                    normalized_fact["importance"] = 2.0
 
                 validated_facts.append(normalized_fact)
 
@@ -413,7 +451,8 @@ Antworte NUR mit JSON, keine zusätzlichen Erklärungen."""
 
             facts.append({
                 "text": sentence,
-                "importance": 0.5,  # Default medium importance
+                "importance": 2.0,  # Default low importance on 0-10 scale
+                "importance_reason": "Heuristik ohne LLM",
                 "participants": [],
                 "theme": "General Fact",
             })
