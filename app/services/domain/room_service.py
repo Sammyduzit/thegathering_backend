@@ -376,15 +376,17 @@ class RoomService:
         if not messages:
             return messages
 
+        target_lang = TranslationService.normalize_target_language(user_language)
+        if not target_lang:
+            return messages
+
         # Get all message IDs for batch translation lookup
         message_ids = [msg.id for msg in messages]
 
         # Batch query all translations for efficiency (avoid N+1 queries)
         translations = {}
         for message_id in message_ids:
-            translation = await self.message_translation_repo.get_by_message_and_language(
-                message_id, user_language.upper()
-            )
+            translation = await self.message_translation_repo.get_by_message_and_language(message_id, target_lang)
             if translation:
                 translations[message_id] = translation.content
 

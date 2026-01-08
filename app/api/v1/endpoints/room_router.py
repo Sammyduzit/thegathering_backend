@@ -269,15 +269,13 @@ async def send_room_message(
 ) -> MessageResponse:
     """
     Send message to room, visible for every member.
-    Background tasks handle translation and notifications.
-    ARQ task triggers AI response if AI is present in room.
+    ARQ tasks handle translation and AI responses.
     :param room_id: Target room ID
     :param message_data: Message content
-    :param background_tasks: FastAPI background tasks
     :param current_user: Current authenticated user
     :param room_service: Service instance handling room logic
-    :param background_service: Background service for async tasks
-    :param arq_pool: ARQ Redis pool for AI response jobs
+    :param background_tasks: FastAPI background tasks for logging
+    :param arq_pool: ARQ Redis pool for translation and AI response jobs
     :return: Created message object
     """
     # Send message immediately
@@ -292,32 +290,58 @@ async def send_room_message(
             arq_pool,
             "check_and_generate_ai_response",
             {
-                "message_id": message_response["id"],
+                "message_id": message_response.id,
                 "room_id": room_id,
             },
-            message_id=message_response["id"],
+            message_id=message_response.id,
             room_id=room_id,
         )
 
-    # Schedule background translation if enabled
-    if room.is_translation_enabled:
+    # Schedule background translation via ARQ if enabled
+    if room.is_translation_enabled and arq_pool:
         # Get room participants to determine target languages
         room_participants = await room_service.get_room_participants(room_id)
+
+        # Map user languages to DeepL target language codes
+        def normalize_language_code(lang: str) -> str:
+            """Normalize language code to DeepL target format."""
+            lang_lower = lang.lower()
+            # DeepL requires EN-US or EN-GB for English target
+            if lang_lower in ["en", "en-us", "en-gb"]:
+                return "EN-US"
+            # Portuguese variants
+            elif lang_lower in ["pt", "pt-br"]:
+                return "PT-BR"
+            elif lang_lower == "pt-pt":
+                return "PT-PT"
+            # Spanish variants
+            elif lang_lower == "es-419":
+                return "ES-419"
+            # Chinese variants
+            elif lang_lower in ["zh-hans", "zh-cn"]:
+                return "ZH-HANS"
+            elif lang_lower in ["zh-hant", "zh-tw"]:
+                return "ZH-HANT"
+            # Default: uppercase
+            return lang.upper()
+
         target_languages = [
-            participant.get("preferred_language", "en")
+            normalize_language_code(participant.get("preferred_language"))
             for participant in room_participants["participants"]
             if not participant.get("is_ai")  # Exclude AI entities
             and participant.get("preferred_language")
-            and participant.get("preferred_language") != "en"
         ]
 
         if target_languages:
-            await async_bg_task_manager.add_async_task(
-                background_tasks,
-                background_service.process_message_translation_background,
-                message_response,  # Message object
-                list(set(target_languages)),  # Unique target languages
-                room.is_translation_enabled,
+            await enqueue_arq_job_safe(
+                arq_pool,
+                "translate_message",
+                {
+                    "message_id": message_response.id,
+                    "message_content": message_response.content,
+                    "target_languages": list(set(target_languages)),
+                },
+                message_id=message_response.id,
             )
 
     # Schedule activity logging

@@ -38,15 +38,18 @@ class TranslationService:
         :param current_user: Current authenticated user
         :return: List of unique uppercase language codes
         """
-        return list(
-            {
-                user.preferred_language.upper()
-                for user in users
-                if user.preferred_language
+        targets = []
+        for user in users:
+            if (
+                user.preferred_language
                 and user.preferred_language != current_user.preferred_language
                 and user.id != current_user.id
-            }
-        )
+            ):
+                normalized = TranslationService.normalize_target_language(user.preferred_language)
+                if normalized:
+                    targets.append(normalized)
+
+        return list(set(targets))
 
     async def translate_message_content(
         self,
@@ -70,9 +73,15 @@ class TranslationService:
             logger.debug("Empty content - skipping translation")
             return {}
 
+        normalized_targets = [self.normalize_target_language(lang) for lang in target_languages if lang]
+        normalized_targets = [lang for lang in normalized_targets if lang]
+        if not normalized_targets:
+            logger.debug("No valid target languages after normalization - skipping translation")
+            return {}
+
         try:
             return await self.translator.translate_to_multiple_languages(
-                text=content, target_languages=target_languages, source_language=source_language
+                text=content, target_languages=normalized_targets, source_language=source_language
             )
         except Exception as e:
             logger.error(f"Translation failed: {e}")
@@ -185,3 +194,34 @@ class TranslationService:
         :return: Number of translations deleted
         """
         return await self.translation_repo.delete_by_message_id(message_id)
+
+    @staticmethod
+    def normalize_target_language(lang: str | None) -> str | None:
+        """
+        Normalize language codes to DeepL-compatible target codes.
+
+        - English: EN-US (default), EN-GB wird ebenfalls auf EN-US gemappt
+        - Portuguese: PT-BR, PT-PT
+        - Spanish LATAM: ES-419
+        - Chinese: ZH-HANS, ZH-HANT
+        - Default: uppercase
+        """
+        if not lang:
+            return None
+
+        lang_lower = lang.lower()
+
+        if lang_lower in ["en", "en-us", "en-gb"]:
+            return "EN-US"
+        if lang_lower in ["pt", "pt-br"]:
+            return "PT-BR"
+        if lang_lower == "pt-pt":
+            return "PT-PT"
+        if lang_lower == "es-419":
+            return "ES-419"
+        if lang_lower in ["zh-hans", "zh-cn"]:
+            return "ZH-HANS"
+        if lang_lower in ["zh-hant", "zh-tw"]:
+            return "ZH-HANT"
+
+        return lang.upper()

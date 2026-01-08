@@ -10,6 +10,7 @@ from app.workers.tasks import (
     check_and_generate_ai_response,
     cleanup_old_short_term_memories_task,
     create_long_term_memory_task,
+    translate_message,
 )
 
 logger = structlog.get_logger(__name__)
@@ -37,6 +38,7 @@ class WorkerSettings:
     functions = [
         check_and_generate_ai_response,
         create_long_term_memory_task,
+        translate_message,
     ]
 
     cron_jobs = [

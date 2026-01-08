@@ -1,4 +1,4 @@
-"""ARQ task functions for AI response generation."""
+"""ARQ task functions for AI response generation and translation."""
 
 from uuid import uuid4
 
@@ -8,16 +8,21 @@ import math
 
 from app.core.arq_db_manager import ARQDatabaseManager, db_session_context
 from app.core.config import settings
+from app.implementations.deepl_translator import DeepLTranslator
 from app.interfaces.ai_provider import AIProviderError
+from app.interfaces.translator import TranslationError
 from app.models.ai_entity import AIEntity, AIEntityStatus
+from app.models.message_translation import MessageTranslation
 from app.providers.openai_provider import OpenAIProvider
 from app.repositories.ai_cooldown_repository import AICooldownRepository
 from app.repositories.ai_entity_repository import AIEntityRepository
 from app.repositories.ai_memory_repository import AIMemoryRepository
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.message_repository import MessageRepository
+from app.repositories.message_translation_repository import MessageTranslationRepository
 from app.services.ai.ai_context_service import AIContextService
 from app.services.ai.ai_response_service import AIResponseService
+from app.services.domain.translation_service import TranslationService
 from app.services.embedding.embedding_factory import create_embedding_service
 from app.services.memory.long_term_memory_service import LongTermMemoryService
 from app.services.memory.short_term_memory_service import ShortTermMemoryService
@@ -706,3 +711,118 @@ async def cleanup_old_short_term_memories_task(ctx: dict) -> dict:
         )
         # Don't retry - will run again tomorrow
         return {"error": str(e), "deleted_count": 0}
+
+
+async def translate_message(
+    ctx: dict,
+    message_id: int,
+    message_content: str,
+    target_languages: list[str],
+) -> dict:
+    """
+    ARQ task: Translate message content to multiple target languages.
+
+    Creates fresh DB session per job to avoid session lifecycle issues.
+    Checks for existing translations before creating new ones.
+
+    :param ctx: ARQ context with db_manager
+    :param message_id: Message ID to translate
+    :param message_content: Message content to translate
+    :param target_languages: List of target language codes (e.g., ['DE', 'FR'])
+    :return: Dict with translation count and language codes
+    :raises Retry: On transient errors (max 3 attempts)
+    """
+    job_id = str(uuid4())
+    db_session_context.set(job_id)
+
+    db_manager: ARQDatabaseManager = ctx["db_manager"]
+
+    normalized_target_languages = [
+        TranslationService.normalize_target_language(lang) for lang in target_languages if lang
+    ]
+    normalized_target_languages = [lang for lang in normalized_target_languages if lang]
+    if not normalized_target_languages:
+        logger.info("no_target_languages_for_translation", message_id=message_id)
+        return {"translation_count": 0, "languages": []}
+
+    logger.info(
+        "translation_task_started",
+        message_id=message_id,
+        target_language_count=len(normalized_target_languages),
+    )
+
+    translations = {}
+
+    try:
+        async for session in db_manager.get_session():
+            translation_repo = MessageTranslationRepository(session)
+            message_repo = MessageRepository(session)
+            translator = DeepLTranslator(api_key=settings.deepl_api_key)
+            translation_service = TranslationService(
+                translator=translator,
+                message_repo=message_repo,
+                translation_repo=translation_repo,
+            )
+
+            for target_lang in normalized_target_languages:
+                try:
+                    existing_translation = await translation_repo.get_by_message_and_language(
+                        message_id, target_lang
+                    )
+
+                    if existing_translation:
+                        translations[target_lang] = existing_translation.content
+                        logger.info(
+                            "existing_translation_used",
+                            message_id=message_id,
+                            target_language=target_lang,
+                        )
+                        continue
+
+                    translation_result = await translation_service.translate_message_content(
+                        content=message_content, target_languages=[target_lang], source_language=None
+                    )
+
+                    if target_lang in translation_result:
+                        content = translation_result[target_lang]
+
+                        new_translation = MessageTranslation(
+                            message_id=message_id, content=content, target_language=target_lang
+                        )
+                        await translation_repo.create(new_translation)
+
+                        translations[target_lang] = content
+                        logger.info(
+                            "message_translated",
+                            message_id=message_id,
+                            target_language=target_lang,
+                        )
+
+                except TranslationError as e:
+                    logger.error(
+                        "translation_api_failed",
+                        message_id=message_id,
+                        target_language=target_lang,
+                        error=str(e),
+                    )
+                    continue
+
+            logger.info(
+                "translation_task_completed",
+                message_id=message_id,
+                translation_count=len(translations),
+            )
+
+            return {
+                "translation_count": len(translations),
+                "languages": list(translations.keys()),
+                "message_id": message_id,
+            }
+
+    except Exception as e:
+        logger.error(
+            "translation_task_failed",
+            error=str(e),
+            message_id=message_id,
+        )
+        raise Retry(defer=ctx["job_try"] * 5)

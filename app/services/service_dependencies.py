@@ -136,20 +136,12 @@ def get_room_service(
     )
 
 
-def get_background_service(
-    translation_service: TranslationService = Depends(get_translation_service),
-    message_translation_repo: IMessageTranslationRepository = Depends(get_message_translation_repository),
-) -> BackgroundService:
+def get_background_service() -> BackgroundService:
     """
-    Create BackgroundService instance with service dependencies.
-    :param translation_service: Translation service instance
-    :param message_translation_repo: MessageTranslation repository instance
+    Create BackgroundService instance for activity logging and notifications.
     :return: BackgroundService instance
     """
-    return BackgroundService(
-        translation_service=translation_service,
-        message_translation_repo=message_translation_repo,
-    )
+    return BackgroundService()
 
 
 def get_ai_provider() -> IAIProvider:
