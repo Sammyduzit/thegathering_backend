@@ -1,3 +1,17 @@
+<img width="1825" height="873" alt="what_is_theG" src="https://github.com/user-attachments/assets/b8585849-9bc6-4465-bf86-770e449ee574" />
+
+<img width="1825" height="873" alt="architecture" src="https://github.com/user-attachments/assets/9e35841f-1800-4185-bd29-fd5e7f5d56f6" />
+
+<img width="1265" height="871" alt="ai_memory" src="https://github.com/user-attachments/assets/07ae266b-60fd-4ddc-928c-2d73afebc8fb" />
+
+<img width="1844" height="835" alt="techn_high" src="https://github.com/user-attachments/assets/dfdd95f2-b75c-46e0-b915-35e88abba691" />
+
+<img width="1176" height="891" alt="deployment" src="https://github.com/user-attachments/assets/05fd040f-7cd1-4b4e-a791-275d5d6714a8" />
+
+<img width="934" height="509" alt="landing_page" src="https://github.com/user-attachments/assets/98df7ef9-929b-4670-aac5-94cef95a7a8c" />
+
+
+
 # The Gathering 🌲
 
 *A quiet digital clearing where souls meet.*
