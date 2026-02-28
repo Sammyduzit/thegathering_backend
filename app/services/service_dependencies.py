@@ -1,3 +1,4 @@
+import structlog
 from fastapi import Depends
 
 from app.core.arq_pool import get_arq_pool
@@ -9,7 +10,8 @@ from app.interfaces.keyword_extractor import IKeywordExtractor
 from app.interfaces.memory_retriever import IMemoryRetriever
 from app.interfaces.memory_summarizer import IMemorySummarizer
 from app.interfaces.translator import TranslatorInterface
-from app.providers.openai_provider import OpenAIProvider
+from app.models.ai_entity import AIModelProvider
+from app.providers.provider_factory import create_ai_provider
 from app.repositories.ai_cooldown_repository import IAICooldownRepository
 from app.repositories.ai_entity_repository import IAIEntityRepository
 from app.repositories.ai_memory_repository import IAIMemoryRepository
@@ -44,6 +46,8 @@ from app.services.memory.vector_memory_retriever import VectorMemoryRetriever
 from app.services.text_processing.heuristic_summarizer import HeuristicMemorySummarizer
 from app.services.text_processing.keyword_extractor_factory import create_keyword_extractor
 from app.services.text_processing.text_chunking_service import TextChunkingService
+
+logger = structlog.get_logger(__name__)
 
 
 def get_deepl_translator() -> TranslatorInterface:
@@ -144,7 +148,7 @@ def get_background_service() -> BackgroundService:
     return BackgroundService()
 
 
-def get_ai_provider() -> IAIProvider:
+def get_ai_provider() -> IAIProvider | None:
     """
     Create AI provider instance (currently OpenAI).
 
@@ -153,9 +157,14 @@ def get_ai_provider() -> IAIProvider:
 
     :return: AI provider instance
     """
-    return OpenAIProvider(
-        api_key=settings.openai_api_key,
-    )
+    if settings.openai_api_key:
+        return create_ai_provider(provider=AIModelProvider.OPENAI)
+
+    if settings.google_api_key:
+        return create_ai_provider(provider=AIModelProvider.GOOGLE)
+
+    logger.warning("No AI provider key configured (OPENAI_API_KEY / GOOGLE_API_KEY)")
+    return None
 
 
 def get_ai_entity_service(
@@ -165,7 +174,7 @@ def get_ai_entity_service(
     room_repo: IRoomRepository = Depends(get_room_repository),
     message_repo: IMessageRepository = Depends(get_message_repository),
     conversation_service: ConversationService = Depends(get_conversation_service),
-    ai_provider: IAIProvider = Depends(get_ai_provider),
+    ai_provider: IAIProvider | None = Depends(get_ai_provider),
 ) -> AIEntityService:
     """
     Create AIEntityService instance with repository and service dependencies.
@@ -289,27 +298,10 @@ def get_ltm_ai_provider():
     :return: AI provider instance for LTM extraction
     :raises RuntimeError: If required API key is not configured
     """
-    if settings.ltm_provider == "google":
-        if not settings.google_api_key:
-            raise RuntimeError(
-                "LTM_PROVIDER is set to 'google' but GOOGLE_API_KEY is not configured. "
-                "Please set GOOGLE_API_KEY in your environment or change LTM_PROVIDER to 'openai'."
-            )
-        from app.providers.google_provider import GoogleProvider
-        return GoogleProvider(
-            api_key=settings.google_api_key,
-            model_name=settings.ltm_extraction_model,
-        )
-    else:
-        if not settings.openai_api_key:
-            raise RuntimeError(
-                "LTM_PROVIDER is set to 'openai' but OPENAI_API_KEY is not configured. "
-                "Please set OPENAI_API_KEY in your environment."
-            )
-        return OpenAIProvider(
-            api_key=settings.openai_api_key,
-            model_name=settings.ltm_extraction_model,
-        )
+    return create_ai_provider(
+        provider=AIModelProvider(settings.ltm_provider),
+        model_name=settings.ltm_extraction_model,
+    )
 
 
 def get_long_term_memory_service(

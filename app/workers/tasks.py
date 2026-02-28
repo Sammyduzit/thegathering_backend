@@ -1,19 +1,19 @@
 """ARQ task functions for AI response generation and translation."""
 
+import math
 from uuid import uuid4
 
 import structlog
 from arq import Retry
-import math
 
 from app.core.arq_db_manager import ARQDatabaseManager, db_session_context
 from app.core.config import settings
 from app.implementations.deepl_translator import DeepLTranslator
 from app.interfaces.ai_provider import AIProviderError
 from app.interfaces.translator import TranslationError
-from app.models.ai_entity import AIEntity, AIEntityStatus
+from app.models.ai_entity import AIEntity, AIEntityStatus, AIModelProvider
 from app.models.message_translation import MessageTranslation
-from app.providers.openai_provider import OpenAIProvider
+from app.providers.provider_factory import create_ai_provider, create_provider_for_entity
 from app.repositories.ai_cooldown_repository import AICooldownRepository
 from app.repositories.ai_entity_repository import AIEntityRepository
 from app.repositories.ai_memory_repository import AIMemoryRepository
@@ -28,7 +28,6 @@ from app.services.memory.long_term_memory_service import LongTermMemoryService
 from app.services.memory.short_term_memory_service import ShortTermMemoryService
 from app.services.service_dependencies import get_embedding_service, get_memory_retriever
 from app.services.text_processing.keyword_extractor_factory import create_keyword_extractor
-from app.services.text_processing.text_chunking_service import TextChunkingService
 
 logger = structlog.get_logger(__name__)
 
@@ -404,11 +403,8 @@ async def check_and_generate_ai_response(
                 logger.error("message_not_found", message_id=message_id)
                 return {"error": "Message not found"}
 
-            # Initialize AI provider and services
-            ai_provider = OpenAIProvider(
-                api_key=settings.openai_api_key,
-                model_name=ai_entity.model_name or "gpt-4o-mini",
-            )
+            # Initialize AI provider from AI entity configuration (provider + model)
+            ai_provider = create_provider_for_entity(ai_entity)
 
             # Initialize memory retriever for context service using factory
             embedding_service = get_embedding_service()
@@ -585,27 +581,11 @@ async def create_long_term_memory_task(
                 )
                 return {"memory_count": 0, "stm_chunks_processed": 0, "stm_chunks_deleted": 0}
 
-            # Initialize LTM AI Provider (Google Gemini or OpenAI)
-            if settings.ltm_provider == "google":
-                if not settings.google_api_key:
-                    raise RuntimeError(
-                        "LTM_PROVIDER is set to 'google' but GOOGLE_API_KEY is not configured"
-                    )
-                from app.providers.google_provider import GoogleProvider
-                ltm_ai_provider = GoogleProvider(
-                    api_key=settings.google_api_key,
-                    model_name=settings.ltm_extraction_model,
-                )
-            else:
-                if not settings.openai_api_key:
-                    raise RuntimeError(
-                        "LTM_PROVIDER is set to 'openai' but OPENAI_API_KEY is not configured"
-                    )
-                from app.providers.openai_provider import OpenAIProvider
-                ltm_ai_provider = OpenAIProvider(
-                    api_key=settings.openai_api_key,
-                    model_name=settings.ltm_extraction_model,
-                )
+            # Initialize LTM AI Provider from configured provider + model
+            ltm_ai_provider = create_ai_provider(
+                provider=AIModelProvider(settings.ltm_provider),
+                model_name=settings.ltm_extraction_model,
+            )
 
             # Initialize services
             embedding_service = create_embedding_service()

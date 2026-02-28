@@ -76,9 +76,9 @@ class FakeLongEmbeddingService(FakeEmbeddingService):
 def _monkeypatch_ai_stack(monkeypatch, *, provider=None, ltm_provider=None, embedding_service=None, keyword_extractor=None):
     """Monkeypatch AI dependencies used inside tasks."""
     if provider:
-        monkeypatch.setattr("app.workers.tasks.OpenAIProvider", lambda *a, **k: provider)
+        monkeypatch.setattr("app.workers.tasks.create_provider_for_entity", lambda *a, **k: provider)
     if ltm_provider is not None:
-        monkeypatch.setattr("app.providers.google_provider.GoogleProvider", lambda *a, **k: ltm_provider)
+        monkeypatch.setattr("app.workers.tasks.create_ai_provider", lambda *a, **k: ltm_provider)
     if embedding_service is not None:
         monkeypatch.setattr("app.workers.tasks.get_embedding_service", lambda: embedding_service)
         monkeypatch.setattr("app.workers.tasks.get_memory_retriever", lambda **kwargs: None)
@@ -184,6 +184,7 @@ async def test_create_long_term_memory_task_happy_path(
 ):
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
+
     from app.models.message import Message
     from app.services.memory.short_term_memory_service import ShortTermMemoryService
 
@@ -290,6 +291,7 @@ async def test_create_long_term_memory_task_retries_on_embedding_error(
 ):
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
+
     from app.models.message import Message
     from app.services.memory.short_term_memory_service import ShortTermMemoryService
 
@@ -359,6 +361,7 @@ async def test_create_long_term_memory_task_creates_missing_stm_chunks(
     """Ensure catch-up STM chunking runs when no STM exists (partial chunk)."""
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
+
     from app.models.message import Message
     from app.repositories.ai_memory_repository import AIMemoryRepository
 
