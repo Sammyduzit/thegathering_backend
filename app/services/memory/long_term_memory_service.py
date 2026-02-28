@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import re
+
 import structlog
 
 from app.core.config import settings
@@ -400,6 +401,10 @@ Antworte NUR mit JSON, keine zusätzlichen Erklärungen."""
                 # Ensure importance is a number in valid range
                 try:
                     normalized_fact["importance"] = float(normalized_fact["importance"])
+                    # Backward compatibility: accept legacy 0.0-1.0 scale from older stubs/tests.
+                    # Current canonical scale is 0-10.
+                    if 0.0 < normalized_fact["importance"] < 1.0:
+                        normalized_fact["importance"] *= 10.0
                     normalized_fact["importance"] = max(0.0, min(10.0, normalized_fact["importance"]))
                 except (ValueError, TypeError):
                     normalized_fact["importance"] = 2.0

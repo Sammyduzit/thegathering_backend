@@ -11,7 +11,7 @@ from app.core.constants import (
     MIN_AI_TEMPERATURE,
 )
 from app.core.validators import SanitizedString
-from app.models.ai_entity import AIEntityStatus, AIResponseStrategy
+from app.models.ai_entity import AIEntityStatus, AIModelProvider, AIResponseStrategy
 
 
 class AIEntityCreate(BaseModel):
@@ -20,6 +20,7 @@ class AIEntityCreate(BaseModel):
     username: SanitizedString = Field(min_length=1, max_length=200, description="Unique AI username")
     description: str | None = Field(None, max_length=1000, description="AI entity description")
     system_prompt: str = Field(min_length=1, max_length=50000, description="AI system prompt/instructions")
+    provider: AIModelProvider = Field(AIModelProvider.OPENAI, description="LLM provider (openai|google)")
     model_name: SanitizedString = Field(min_length=1, max_length=100, description="LLM model name")
     temperature: float | None = Field(None, ge=MIN_AI_TEMPERATURE, le=MAX_AI_TEMPERATURE, description="LLM temperature")
     max_tokens: int | None = Field(None, ge=MIN_AI_MAX_TOKENS, le=MAX_AI_MAX_TOKENS, description="Max response tokens")
@@ -53,6 +54,7 @@ class AIEntityUpdate(BaseModel):
     username: SanitizedString | None = Field(None, min_length=1, max_length=200)
     description: str | None = Field(None, max_length=1000)
     system_prompt: str | None = Field(None, min_length=1, max_length=50000)
+    provider: AIModelProvider | None = Field(None, description="LLM provider (openai|google)")
     model_name: SanitizedString | None = Field(None, min_length=1, max_length=100)
     temperature: float | None = Field(None, ge=MIN_AI_TEMPERATURE, le=MAX_AI_TEMPERATURE)
     max_tokens: int | None = Field(None, ge=MIN_AI_MAX_TOKENS, le=MAX_AI_MAX_TOKENS)
@@ -87,6 +89,7 @@ class AIEntityResponse(BaseModel):
     username: str
     description: str | None
     system_prompt: str
+    provider: AIModelProvider
     model_name: str
     temperature: float | None
     max_tokens: int | None
@@ -122,6 +125,7 @@ class AIAvailableResponse(BaseModel):
 
     id: int
     username: str
+    provider: AIModelProvider
     model_name: str
     status: AIEntityStatus
 
