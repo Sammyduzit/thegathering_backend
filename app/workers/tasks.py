@@ -20,6 +20,7 @@ from app.repositories.ai_memory_repository import AIMemoryRepository
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.message_repository import MessageRepository
 from app.repositories.message_translation_repository import MessageTranslationRepository
+from app.repositories.user_repository import UserRepository
 from app.services.ai.ai_context_service import AIContextService
 from app.services.ai.ai_response_service import AIResponseService
 from app.services.domain.translation_service import TranslationService
@@ -380,6 +381,7 @@ async def check_and_generate_ai_response(
             memory_repo = AIMemoryRepository(session)
             conversation_repo = ConversationRepository(session)
             cooldown_repo = AICooldownRepository(session)
+            user_repo = UserRepository(session)
 
             # Get AI entity (from ID or lookup)
             ai_entity = await _lookup_ai_entity(ai_entity_repo, ai_entity_id, room_id, conversation_id)
@@ -425,6 +427,7 @@ async def check_and_generate_ai_response(
                 context_service=context_service,
                 message_repo=message_repo,
                 cooldown_repo=cooldown_repo,
+                user_repo=user_repo,
             )
 
             # Check if AI should respond based on strategy

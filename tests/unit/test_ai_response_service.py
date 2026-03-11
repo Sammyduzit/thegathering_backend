@@ -155,6 +155,85 @@ class TestAIResponseService:
                 user_id=42,
             )
 
+    async def test_generate_conversation_response_agent_mode_success(
+        self, mock_ai_provider, mock_context_service, mock_message_repo, mock_cooldown_repo, sample_ai_entity
+    ):
+        """Agent mode should be used in conversations when enabled and dependencies exist."""
+        from app.core.config import settings
+
+        original_value = settings.ai_agent_mode_enabled
+        settings.ai_agent_mode_enabled = True
+        try:
+            mock_user_repo = AsyncMock()
+            mock_agent_response_service = AsyncMock()
+            mock_agent_response_service.generate_conversation_response.return_value = "Agent answer"
+
+            service = AIResponseService(
+                ai_provider=mock_ai_provider,
+                context_service=mock_context_service,
+                message_repo=mock_message_repo,
+                cooldown_repo=mock_cooldown_repo,
+                user_repo=mock_user_repo,
+                agent_response_service=mock_agent_response_service,
+            )
+
+            messages = [{"role": "user", "content": "Hello"}]
+            mock_context_service.build_full_context.return_value = (messages, None)
+            created_message = Message(id=1, content="Agent answer", conversation_id=1, sender_ai_id=1)
+            mock_message_repo.create_conversation_message.return_value = created_message
+
+            result = await service.generate_conversation_response(
+                conversation_id=1,
+                ai_entity=sample_ai_entity,
+                user_id=42,
+            )
+
+            assert result.content == "Agent answer"
+            mock_agent_response_service.generate_conversation_response.assert_called_once()
+            mock_ai_provider.generate_response.assert_not_called()
+        finally:
+            settings.ai_agent_mode_enabled = original_value
+
+    async def test_generate_conversation_response_agent_mode_fallback_to_direct_llm(
+        self, mock_ai_provider, mock_context_service, mock_message_repo, mock_cooldown_repo, sample_ai_entity
+    ):
+        """If agent generation fails, service must fallback to direct provider call."""
+        from app.core.config import settings
+
+        original_value = settings.ai_agent_mode_enabled
+        settings.ai_agent_mode_enabled = True
+        try:
+            mock_user_repo = AsyncMock()
+            mock_agent_response_service = AsyncMock()
+            mock_agent_response_service.generate_conversation_response.side_effect = RuntimeError("agent failed")
+
+            service = AIResponseService(
+                ai_provider=mock_ai_provider,
+                context_service=mock_context_service,
+                message_repo=mock_message_repo,
+                cooldown_repo=mock_cooldown_repo,
+                user_repo=mock_user_repo,
+                agent_response_service=mock_agent_response_service,
+            )
+
+            messages = [{"role": "user", "content": "Hello"}]
+            mock_context_service.build_full_context.return_value = (messages, None)
+            mock_ai_provider.generate_response.return_value = "Direct fallback answer"
+            created_message = Message(id=1, content="Direct fallback answer", conversation_id=1, sender_ai_id=1)
+            mock_message_repo.create_conversation_message.return_value = created_message
+
+            result = await service.generate_conversation_response(
+                conversation_id=1,
+                ai_entity=sample_ai_entity,
+                user_id=42,
+            )
+
+            assert result.content == "Direct fallback answer"
+            mock_agent_response_service.generate_conversation_response.assert_called_once()
+            mock_ai_provider.generate_response.assert_called_once()
+        finally:
+            settings.ai_agent_mode_enabled = original_value
+
     async def test_generate_room_response_success(
         self, service, mock_ai_provider, mock_context_service, mock_message_repo, sample_ai_entity
     ):
