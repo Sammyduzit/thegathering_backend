@@ -93,6 +93,11 @@ class IMessageRepository(BaseRepository[Message]):
         pass
 
     @abstractmethod
+    async def search_messages(self, query: str, conversation_id: int, limit: int = 5) -> list[Message]:
+        """Search messages by substring within a specific conversation scope."""
+        pass
+
+    @abstractmethod
     async def delete_room_messages(self, room_id: int) -> int:
         """Delete all messages from a room (hard delete for room cleanup)"""
         pass
@@ -378,6 +383,36 @@ class MessageRepository(IMessageRepository):
             logger.error(f"Error cleaning up room messages: {e}")
             await self.db.rollback()
             return 0
+
+    async def search_messages(self, query: str, conversation_id: int, limit: int = 5) -> list[Message]:
+        """
+        Search conversation messages via case-insensitive substring matching.
+
+        Scope is strictly limited to one conversation to avoid cross-chat leakage.
+        """
+        from sqlalchemy.orm import selectinload
+
+        normalized_query = query.strip()
+        if not normalized_query:
+            return []
+
+        safe_limit = min(max(limit, 1), 10)
+        stmt = (
+            select(Message)
+            .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
+            .where(
+                and_(
+                    Message.conversation_id == conversation_id,
+                    Message.room_id.is_(None),
+                    Message.content.ilike(f"%{normalized_query}%"),
+                )
+            )
+            .order_by(desc(Message.sent_at))
+            .limit(safe_limit)
+        )
+
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
 
     async def delete_room_messages(self, room_id: int) -> int:
         """
