@@ -7,12 +7,13 @@ Provides chat completion functionality via Google's Gemini API with modern async
 from typing import AsyncIterator
 
 import structlog
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.core.constants import (
-    DEFAULT_PROVIDER_MAX_TOKENS,
     DEFAULT_GEMINI_PROVIDER_MODEL,
+    DEFAULT_PROVIDER_MAX_TOKENS,
     DEFAULT_PROVIDER_TEMPERATURE,
 )
 from app.interfaces.ai_provider import AIProviderError, IAIProvider
@@ -53,7 +54,7 @@ class GoogleProvider(IAIProvider):
 
     def _build_messages(
         self, messages: list[dict[str, str]], system_prompt: str | None = None
-    ) -> list[SystemMessage | HumanMessage]:
+    ) -> list[SystemMessage | HumanMessage | AIMessage]:
         """
         Build LangChain message list from message dicts.
 
@@ -74,7 +75,9 @@ class GoogleProvider(IAIProvider):
 
             if role == "system":
                 lc_messages.append(SystemMessage(content=content))
-            else:  # user or assistant
+            elif role == "assistant":
+                lc_messages.append(AIMessage(content=content))
+            else:
                 lc_messages.append(HumanMessage(content=content))
 
         return lc_messages
@@ -193,3 +196,15 @@ class GoogleProvider(IAIProvider):
         :return: Model identifier (e.g., 'gemini-1.5-flash')
         """
         return self.model_name
+
+    def get_chat_model(
+        self,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> BaseChatModel:
+        """
+        Get the underlying LangChain chat model.
+
+        :return: Configured ChatGoogleGenerativeAI model instance
+        """
+        return self._get_llm_override(temperature=temperature, max_tokens=max_tokens)
