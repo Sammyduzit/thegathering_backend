@@ -3,7 +3,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from app.interfaces.ai_provider import AIProviderError
 from app.providers.openai_provider import OpenAIProvider
@@ -128,6 +128,22 @@ class TestOpenAIProvider:
         # Assert
         assert result == "How can I help?"
 
+    async def test_generate_response_maps_assistant_role_to_ai_message(self, provider):
+        """Assistant messages must stay assistant-role for downstream agent quality."""
+        messages = [
+            {"role": "user", "content": "Hi"},
+            {"role": "assistant", "content": "Hello, how can I help?"},
+            {"role": "user", "content": "Tell me more"},
+        ]
+        provider.llm.ainvoke.return_value = AIMessage(content="Sure")
+
+        await provider.generate_response(messages=messages)
+
+        call_args = provider.llm.ainvoke.call_args[0][0]
+        assert isinstance(call_args[0], HumanMessage)
+        assert isinstance(call_args[1], AIMessage)
+        assert isinstance(call_args[2], HumanMessage)
+
     async def test_generate_response_provider_error(self, provider):
         """Test handling LLM provider errors."""
         # Arrange
@@ -171,3 +187,7 @@ class TestOpenAIProvider:
 
         # Assert
         assert result is False
+
+    def test_get_chat_model_returns_underlying_llm(self, provider):
+        """Agent runtime should receive provider-configured chat model."""
+        assert provider.get_chat_model() is provider.llm
