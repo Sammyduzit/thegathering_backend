@@ -78,6 +78,7 @@ class AIEntityService:
         cooldown_seconds: int | None = None,
         config: dict | None = None,
         avatar_url: str | None = None,
+        agent_mode_enabled: bool = False,
     ) -> AIEntity:
         """Create new AI entity with validation."""
         if await self.ai_entity_repo.username_exists(username):
@@ -103,6 +104,7 @@ class AIEntityService:
             cooldown_seconds=cooldown_seconds,
             config=config,
             avatar_url=avatar_url,
+            agent_mode_enabled=agent_mode_enabled,
             status=AIEntityStatus.OFFLINE,
         )
 
@@ -124,6 +126,7 @@ class AIEntityService:
         cooldown_seconds: int | None = None,
         config: dict | None = None,
         avatar_url: str | None = None,
+        agent_mode_enabled: bool | None = None,
         status: AIEntityStatus | None = None,
         current_room_id: int | None = ...,  # ... as sentinel: not provided
     ) -> AIEntity:
@@ -159,6 +162,7 @@ class AIEntityService:
             cooldown_seconds=cooldown_seconds,
             config=config,
             avatar_url=avatar_url,
+            agent_mode_enabled=agent_mode_enabled,
         )
 
         # Commit changes with optimistic locking for room assignment
@@ -362,6 +366,7 @@ class AIEntityService:
         cooldown_seconds: int | None = None,
         config: dict | None = None,
         avatar_url: str | None = None,
+        agent_mode_enabled: bool | None = None,
     ) -> None:
         """
         Update entity fields if provided.
@@ -409,6 +414,8 @@ class AIEntityService:
             entity.config = config
         if avatar_url is not None:
             entity.avatar_url = avatar_url
+        if agent_mode_enabled is not None:
+            entity.agent_mode_enabled = agent_mode_enabled
 
     async def _generate_farewell_message(
         self,

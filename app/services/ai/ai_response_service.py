@@ -202,6 +202,7 @@ Respond naturally and directly."""
         """Generate conversation content using agent mode when enabled."""
         if (
             settings.ai_agent_mode_enabled
+            and ai_entity.agent_mode_enabled
             and user_id is not None
             and self.user_repo is not None
             and self.context_service.memory_retriever is not None

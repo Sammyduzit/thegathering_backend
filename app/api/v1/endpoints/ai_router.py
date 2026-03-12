@@ -87,6 +87,7 @@ async def create_ai_entity(
         cooldown_seconds=entity_data.cooldown_seconds,
         config=entity_data.config,
         avatar_url=entity_data.avatar_url,
+        agent_mode_enabled=entity_data.agent_mode_enabled,
     )
 
 
@@ -127,6 +128,7 @@ async def update_ai_entity(
         cooldown_seconds=entity_data.cooldown_seconds,
         config=entity_data.config,
         avatar_url=entity_data.avatar_url,
+        agent_mode_enabled=entity_data.agent_mode_enabled,
         status=entity_data.status,
         current_room_id=entity_data.current_room_id,
     )

@@ -46,6 +46,7 @@ class AIEntityCreate(BaseModel):
 
     config: dict | None = Field(None, description="Additional LangChain configuration")
     avatar_url: str | None = Field(None, description="Optional custom avatar URL (auto-generated if null)")
+    agent_mode_enabled: bool = Field(False, description="Enable agent mode (tool-calling) for this entity")
 
 
 class AIEntityUpdate(BaseModel):
@@ -76,6 +77,7 @@ class AIEntityUpdate(BaseModel):
 
     config: dict | None = None
     avatar_url: str | None = Field(None, description="Update avatar URL")
+    agent_mode_enabled: bool | None = Field(None, description="Enable agent mode (tool-calling) for this entity")
     status: AIEntityStatus | None = Field(None, description="AI online/offline status")
     current_room_id: int | None = Field(
         None, description="Room assignment (None=leave room, int=assign to room, omit=no change)"
@@ -104,6 +106,7 @@ class AIEntityResponse(BaseModel):
 
     config: dict | None
     avatar_url: str | None
+    agent_mode_enabled: bool
     status: AIEntityStatus
     is_active: bool
     current_room_id: int | None
