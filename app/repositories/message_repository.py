@@ -4,6 +4,7 @@ import structlog
 from sqlalchemy import and_, delete, desc, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.message import Message, MessageType
 from app.repositories.base_repository import BaseRepository
@@ -206,8 +207,6 @@ class MessageRepository(IMessageRepository):
         result = await self.db.execute(count_query)
         total_count = result.scalar() or 0
 
-        from sqlalchemy.orm import selectinload
-
         offset = (page - 1) * page_size
         messages_query = (
             select(Message)
@@ -237,8 +236,6 @@ class MessageRepository(IMessageRepository):
         total_count = result.scalar() or 0
 
         offset = (page - 1) * page_size
-        from sqlalchemy.orm import selectinload
-
         messages_query = (
             select(Message)
             .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
@@ -260,8 +257,6 @@ class MessageRepository(IMessageRepository):
 
     async def get_user_messages(self, user_id: int, limit: int = 50) -> list[Message]:
         """Get messages sent by a specific user."""
-        from sqlalchemy.orm import selectinload
-
         query = (
             select(Message)
             .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
@@ -275,8 +270,6 @@ class MessageRepository(IMessageRepository):
 
     async def get_latest_room_messages(self, room_id: int, limit: int = 10) -> list[Message]:
         """Get latest messages from a room."""
-        from sqlalchemy.orm import selectinload
-
         query = (
             select(Message)
             .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
@@ -290,8 +283,6 @@ class MessageRepository(IMessageRepository):
 
     async def get_latest_conversation_message(self, conversation_id: int) -> Message | None:
         """Get most recent message from a conversation."""
-        from sqlalchemy.orm import selectinload
-
         query = (
             select(Message)
             .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
@@ -316,8 +307,6 @@ class MessageRepository(IMessageRepository):
         Get recent messages from either a room or conversation.
         Unified method for fetching latest messages regardless of context.
         """
-        from sqlalchemy.orm import selectinload
-
         # Validate XOR: exactly one must be set
         if (room_id is None) == (conversation_id is None):
             raise ValueError("Exactly one of room_id or conversation_id must be provided")
@@ -390,14 +379,12 @@ class MessageRepository(IMessageRepository):
 
         Scope is strictly limited to one conversation to avoid cross-chat leakage.
         """
-        from sqlalchemy.orm import selectinload
-
         normalized_query = query.strip()
         if not normalized_query:
             return []
 
         safe_limit = min(max(limit, 1), 10)
-        stmt = (
+        messages_query = (
             select(Message)
             .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
             .where(
@@ -411,7 +398,7 @@ class MessageRepository(IMessageRepository):
             .limit(safe_limit)
         )
 
-        result = await self.db.execute(stmt)
+        result = await self.db.execute(messages_query)
         return list(result.scalars().all())
 
     async def delete_room_messages(self, room_id: int) -> int:

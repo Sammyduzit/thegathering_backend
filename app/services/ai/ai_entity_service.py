@@ -19,6 +19,7 @@ from app.repositories.ai_entity_repository import IAIEntityRepository
 from app.repositories.conversation_repository import IConversationRepository
 from app.repositories.message_repository import IMessageRepository
 from app.repositories.room_repository import IRoomRepository
+from app.services.domain.avatar_service import generate_avatar_url
 
 if TYPE_CHECKING:
     from app.models.conversation import Conversation
@@ -86,8 +87,6 @@ class AIEntityService:
 
         # Generate avatar if not provided
         if not avatar_url:
-            from app.services.domain.avatar_service import generate_avatar_url
-
             avatar_url = await generate_avatar_url(username, style="bottts")
 
         new_entity = AIEntity(
