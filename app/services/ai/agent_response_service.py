@@ -5,6 +5,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 import structlog
+from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
@@ -33,7 +34,6 @@ class AgentResponseService:
         self.message_repo = message_repo
         self.user_repo = user_repo
         self.max_tool_iterations = max_tool_iterations
-        self._create_agent_callable = self._resolve_create_agent()
 
     async def generate_conversation_response(
         self,
@@ -57,14 +57,13 @@ class AgentResponseService:
         )
 
         try:
-            if self._create_agent_callable:
-                return await self._generate_with_create_agent(
-                    tools=tools,
-                    messages=messages,
-                    system_prompt=system_prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
+            return await self._generate_with_create_agent(
+                tools=tools,
+                messages=messages,
+                system_prompt=system_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
         except Exception as exc:
             logger.warning("create_agent_runtime_failed_fallback", error=str(exc))
 
@@ -76,14 +75,6 @@ class AgentResponseService:
             max_tokens=max_tokens,
         )
 
-    def _resolve_create_agent(self):
-        try:
-            from langchain.agents import create_agent
-
-            return create_agent
-        except Exception:
-            return None
-
     async def _generate_with_create_agent(
         self,
         *,
@@ -93,16 +84,6 @@ class AgentResponseService:
         temperature: float,
         max_tokens: int,
     ) -> str:
-        create_agent = self._create_agent_callable
-        if create_agent is None:
-            return await self._generate_with_manual_tool_loop(
-                tools=tools,
-                messages=messages,
-                system_prompt=system_prompt,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-
         model = self.ai_provider.get_chat_model(
             temperature=temperature,
             max_tokens=max_tokens,

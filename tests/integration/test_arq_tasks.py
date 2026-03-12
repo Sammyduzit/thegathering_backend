@@ -201,9 +201,13 @@ async def test_check_and_generate_ai_response_agent_mode_executes_tool_call(
         monkeypatch.setattr("app.workers.tasks.get_embedding_service", lambda: FakeEmbeddingService())
         monkeypatch.setattr("app.workers.tasks.get_memory_retriever", lambda **kwargs: FakeMemoryRetriever())
         monkeypatch.setattr("app.workers.tasks.create_keyword_extractor", lambda: FakeKeywordExtractor())
+
+        def _create_agent_unavailable(*args, **kwargs):
+            raise RuntimeError("create_agent unavailable in test")
+
         monkeypatch.setattr(
-            "app.services.ai.agent_response_service.AgentResponseService._resolve_create_agent",
-            lambda self: None,
+            "app.services.ai.agent_response_service.create_agent",
+            _create_agent_unavailable,
         )
 
         call_info = {}
