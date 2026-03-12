@@ -44,6 +44,7 @@ def sample_ai_entity(sample_ai_entity_data):
         status=AIEntityStatus.ONLINE,
         temperature=0.7,
         max_tokens=1024,
+        agent_mode_enabled=True,
     )
 
 
