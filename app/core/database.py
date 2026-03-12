@@ -37,10 +37,7 @@ async def create_tables():
         await conn.run_sync(Base.metadata.create_all)
         # GIN index for trigram-based full-text search on message content
         await conn.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS idx_messages_content_trgm "
-                "ON messages USING GIN (content gin_trgm_ops)"
-            )
+            text("CREATE INDEX IF NOT EXISTS idx_messages_content_trgm ON messages USING GIN (content gin_trgm_ops)")
         )
     print("All tables created")
 
