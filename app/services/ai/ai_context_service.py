@@ -295,9 +295,7 @@ class AIContextService:
 
         logger.debug("access_tracking_updated", memory_count=len(memories))
 
-    def build_retrieval_query(
-        self, messages: list[dict[str, str]], use_last_n: int = 3
-    ) -> str:
+    def build_retrieval_query(self, messages: list[dict[str, str]], use_last_n: int = 3) -> str:
         """
         Build enhanced RAG query from recent messages for better context.
 

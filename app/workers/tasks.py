@@ -749,9 +749,7 @@ async def translate_message(
 
             for target_lang in normalized_target_languages:
                 try:
-                    existing_translation = await translation_repo.get_by_message_and_language(
-                        message_id, target_lang
-                    )
+                    existing_translation = await translation_repo.get_by_message_and_language(message_id, target_lang)
 
                     if existing_translation:
                         translations[target_lang] = existing_translation.content

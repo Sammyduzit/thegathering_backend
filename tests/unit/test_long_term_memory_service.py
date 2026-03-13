@@ -68,14 +68,19 @@ class TestLongTermMemoryService:
             "theme": "Python Expertise",
         }
         deps["ai_provider"].generate_response.return_value = '{"facts": [%s]}' % (
-            '{"text": "%s", "importance": 0.9, "participants": ["Alice"], "theme": "Python Expertise"}'
-            % fact["text"]
+            '{"text": "%s", "importance": 0.9, "participants": ["Alice"], "theme": "Python Expertise"}' % fact["text"]
         )
         deps["memory_repo"].get_ltm_fact.return_value = None
         deps["embedding_service"].embed_text.return_value = [0.1]
 
         chunk = _make_chunk(
-            messages=[{"message_id": 1, "sender_name": "Alice", "content": "Alice ist Python-Expertin mit 10 Jahren Erfahrung."}],
+            messages=[
+                {
+                    "message_id": 1,
+                    "sender_name": "Alice",
+                    "content": "Alice ist Python-Expertin mit 10 Jahren Erfahrung.",
+                }
+            ],
             chunk_index=2,
             message_range="10-33",
         )
@@ -102,7 +107,11 @@ class TestLongTermMemoryService:
         assert created.memory_metadata["fact_hash"]
 
     async def test_idempotence_skips_existing_fact(self, deps):
-        deps["ai_provider"].generate_response.return_value = '{"facts": [{"text": "dup", "importance": 0.6, "participants": [], "theme": "T"}]}'
+        deps[
+            "ai_provider"
+        ].generate_response.return_value = (
+            '{"facts": [{"text": "dup", "importance": 0.6, "participants": [], "theme": "T"}]}'
+        )
         deps["memory_repo"].get_ltm_fact.return_value = MagicMock()  # Simulate existing
 
         chunk = _make_chunk(
@@ -126,7 +135,9 @@ class TestLongTermMemoryService:
         deps["embedding_service"].embed_text.return_value = [0.2]
 
         chunk = _make_chunk(
-            messages=[{"sender_name": "Alice", "content": "Alice ist sehr freundlich und hilft gerne anderen Menschen."}],
+            messages=[
+                {"sender_name": "Alice", "content": "Alice ist sehr freundlich und hilft gerne anderen Menschen."}
+            ],
             chunk_index=0,
         )
 

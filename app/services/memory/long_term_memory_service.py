@@ -102,11 +102,13 @@ class LongTermMemoryService(BaseMemoryService):
         :return: List of facts [{"text": str, "importance": float, "participants": list, "theme": str}]
         """
         # Format messages for LLM (use .get() for safety)
-        formatted_messages = "\n".join([
-            f"{msg.get('sender_name', 'Unknown')}: {msg.get('content', '')}"
-            for msg in chunk_messages
-            if msg.get('content')  # Skip empty messages
-        ])
+        formatted_messages = "\n".join(
+            [
+                f"{msg.get('sender_name', 'Unknown')}: {msg.get('content', '')}"
+                for msg in chunk_messages
+                if msg.get("content")  # Skip empty messages
+            ]
+        )
 
         if not formatted_messages:
             return []
@@ -129,11 +131,12 @@ class LongTermMemoryService(BaseMemoryService):
 
                 # Filter by importance threshold and max facts
                 filtered_facts = [
-                    f for f in facts
+                    f
+                    for f in facts
                     if f.get("importance", 0.0) >= settings.ltm_min_importance_threshold
                     and f.get("text")  # Must have text
                 ]
-                filtered_facts = filtered_facts[:settings.ltm_max_facts_per_chunk]
+                filtered_facts = filtered_facts[: settings.ltm_max_facts_per_chunk]
 
                 # Fallback to heuristic if LLM returned no usable facts
                 if not filtered_facts:
@@ -437,9 +440,9 @@ Antworte NUR mit JSON, keine zusätzlichen Erklärungen."""
 
         # Extract factual sentences using non-capturing groups to get full sentences
         # Pattern: sentence containing factual verbs
-        sentences = re.split(r'[.!?]+', combined_text)
+        sentences = re.split(r"[.!?]+", combined_text)
 
-        factual_verbs = r'\b(?:ist|hat|kann|arbeitet|lernt|mag|bevorzugt|studiert|kennt|weiß)\b'
+        factual_verbs = r"\b(?:ist|hat|kann|arbeitet|lernt|mag|bevorzugt|studiert|kennt|weiß)\b"
 
         factual_sentences = []
         for sentence in sentences:
@@ -454,13 +457,15 @@ Antworte NUR mit JSON, keine zusätzlichen Erklärungen."""
             if len(sentence) > 300:
                 continue
 
-            facts.append({
-                "text": sentence,
-                "importance": 2.0,  # Default low importance on 0-10 scale
-                "importance_reason": "Heuristik ohne LLM",
-                "participants": [],
-                "theme": "General Fact",
-            })
+            facts.append(
+                {
+                    "text": sentence,
+                    "importance": 2.0,  # Default low importance on 0-10 scale
+                    "importance_reason": "Heuristik ohne LLM",
+                    "participants": [],
+                    "theme": "General Fact",
+                }
+            )
 
         return facts
 
@@ -474,5 +479,5 @@ Antworte NUR mit JSON, keine zusätzlichen Erklärungen."""
         :return: SHA256 hash (16 characters)
         """
         normalized = fact_text.strip().lower()
-        normalized = re.sub(r'\s+', ' ', normalized)
+        normalized = re.sub(r"\s+", " ", normalized)
         return hashlib.sha256(normalized.encode()).hexdigest()[:16]

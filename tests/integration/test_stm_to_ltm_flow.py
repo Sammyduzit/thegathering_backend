@@ -17,7 +17,7 @@ class StubAIProvider:
         return (
             '{"facts": ['
             '{"text": "User liebt Rust", "importance": 0.9, "participants": ["user1"], "theme": "Rust"}'
-            ']}'  # noqa: E501
+            "]}"  # noqa: E501
         )
 
 

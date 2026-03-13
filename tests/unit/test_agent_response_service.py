@@ -1,7 +1,7 @@
 """Unit tests for AgentResponseService."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -71,9 +71,7 @@ async def test_agent_response_service_executes_tool_call_then_returns_final_answ
         [
             AIMessage(
                 content="",
-                tool_calls=[
-                    {"id": "call_1", "name": "search_message_history", "args": {"query": "rust", "limit": 2}}
-                ],
+                tool_calls=[{"id": "call_1", "name": "search_message_history", "args": {"query": "rust", "limit": 2}}],
             ),
             AIMessage(content="Final answer with tool context"),
         ]
@@ -132,20 +130,16 @@ async def test_agent_response_service_create_agent_reads_messages_output():
         async def ainvoke(self, _payload):
             return {"messages": [AIMessage(content="Agent output")]}
 
-    def fake_create_agent(*_args, **_kwargs):
-        return FakeAgent()
-
-    service._create_agent_callable = fake_create_agent
-
-    result = await service.generate_conversation_response(
-        messages=[{"role": "user", "content": "Hi"}],
-        system_prompt="Be helpful",
-        temperature=0.4,
-        max_tokens=80,
-        ai_entity_id=1,
-        conversation_id=2,
-        user_id=3,
-    )
+    with patch("app.services.ai.agent_response_service.create_agent", return_value=FakeAgent()):
+        result = await service.generate_conversation_response(
+            messages=[{"role": "user", "content": "Hi"}],
+            system_prompt="Be helpful",
+            temperature=0.4,
+            max_tokens=80,
+            ai_entity_id=1,
+            conversation_id=2,
+            user_id=3,
+        )
 
     assert result == "Agent output"
     assert provider.last_overrides == {"temperature": 0.4, "max_tokens": 80}

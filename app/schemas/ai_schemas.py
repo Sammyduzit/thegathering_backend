@@ -135,6 +135,12 @@ class AIAvailableResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AIConfigResponse(BaseModel):
+    """Response for global AI configuration status."""
+
+    agent_mode_enabled: bool = Field(description="Whether agent mode is globally enabled (AI_AGENT_MODE_ENABLED)")
+
+
 class AIGoodbyeResponse(BaseModel):
     """
     Response for AI goodbye initiation.

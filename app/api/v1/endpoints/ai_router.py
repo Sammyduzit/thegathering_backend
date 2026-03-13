@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, status
 
 from app.core.auth_dependencies import get_admin_user_with_csrf, get_current_admin_user
+from app.core.config import settings
 from app.models.user import User
 from app.schemas.ai_schemas import (
     AIAvailableResponse,
+    AIConfigResponse,
     AIEntityCreate,
     AIEntityResponse,
     AIEntityUpdate,
@@ -14,6 +16,18 @@ from app.services.ai.ai_entity_service import AIEntityService
 from app.services.service_dependencies import get_ai_entity_service
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+@router.get("/config", response_model=AIConfigResponse)
+async def get_ai_config(
+    current_admin: User = Depends(get_current_admin_user),
+) -> AIConfigResponse:
+    """
+    Get global AI configuration status (Admin only).
+    :param current_admin: Current authenticated admin
+    :return: Global AI config flags
+    """
+    return AIConfigResponse(agent_mode_enabled=settings.ai_agent_mode_enabled)
 
 
 @router.get("/entities", response_model=list[AIEntityResponse])

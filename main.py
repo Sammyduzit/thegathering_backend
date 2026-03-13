@@ -1,6 +1,8 @@
 import logging
+import logging.handlers
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
 import structlog
 import uvicorn
@@ -29,19 +31,52 @@ from app.core.exceptions import (
 )
 from app.core.redis_client import close_redis_client, create_redis_client
 
+# Shared processors applied to every log record
+_shared_processors = [
+    structlog.contextvars.merge_contextvars,
+    structlog.processors.add_log_level,
+    structlog.processors.StackInfoRenderer(),
+    structlog.dev.set_exc_info,
+    structlog.processors.TimeStamper(fmt="iso", utc=True),
+]
+
+# Console: pretty in dev, JSON in prod
+_console_formatter = structlog.stdlib.ProcessorFormatter(
+    processor=structlog.dev.ConsoleRenderer() if settings.debug else structlog.processors.JSONRenderer(),
+    foreign_pre_chain=_shared_processors,
+)
+
+# File: always JSON
+Path("logs").mkdir(exist_ok=True)
+_file_formatter = structlog.stdlib.ProcessorFormatter(
+    processor=structlog.processors.JSONRenderer(),
+    foreign_pre_chain=_shared_processors,
+)
+
+_console_handler = logging.StreamHandler()
+_console_handler.setFormatter(_console_formatter)
+
+_file_handler = logging.handlers.RotatingFileHandler(
+    "logs/app.log", maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+)
+_file_handler.setFormatter(_file_formatter)
+
+logging.basicConfig(level=logging.INFO, handlers=[_console_handler, _file_handler], force=True)
+# Suppress SQLAlchemy logs — echo=False in database.py is the primary control,
+# propagate=False ensures no SQL leaks through even if echo is temporarily enabled
+for _sa_logger in ("sqlalchemy.engine", "sqlalchemy.pool"):
+    logging.getLogger(_sa_logger).setLevel(logging.WARNING)
+    logging.getLogger(_sa_logger).propagate = False
+
 # Configure structlog
 structlog.configure(
     processors=[
-        structlog.contextvars.merge_contextvars,
-        structlog.processors.add_log_level,
-        structlog.processors.StackInfoRenderer(),
-        structlog.dev.set_exc_info,
-        structlog.processors.TimeStamper(fmt="iso", utc=True),
-        structlog.dev.ConsoleRenderer() if settings.debug else structlog.processors.JSONRenderer(),
+        *_shared_processors,
+        structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
     ],
-    wrapper_class=structlog.make_filtering_bound_logger(logging.NOTSET),
+    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
     context_class=dict,
-    logger_factory=structlog.PrintLoggerFactory(),
+    logger_factory=structlog.stdlib.LoggerFactory(),
     cache_logger_on_first_use=True,
 )
 

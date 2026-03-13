@@ -58,4 +58,3 @@ def create_provider_for_entity(ai_entity: AIEntity) -> IAIProvider:
         provider=provider,
         model_name=ai_entity.model_name,
     )
-

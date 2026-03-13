@@ -216,7 +216,7 @@ Respond naturally and directly."""
                         user_repo=self.user_repo,
                     )
 
-                return await self.agent_response_service.generate_conversation_response(
+                response = await self.agent_response_service.generate_conversation_response(
                     messages=messages,
                     system_prompt=system_prompt,
                     temperature=ai_entity.temperature,
@@ -225,6 +225,12 @@ Respond naturally and directly."""
                     conversation_id=conversation_id,
                     user_id=user_id,
                 )
+                logger.info(
+                    "agent_mode_used",
+                    ai_entity_id=ai_entity.id,
+                    conversation_id=conversation_id,
+                )
+                return response
             except Exception as exc:
                 logger.warning(
                     "agent_mode_failed_fallback_to_direct_llm",

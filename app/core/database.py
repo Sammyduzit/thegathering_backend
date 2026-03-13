@@ -11,7 +11,7 @@ engine = create_async_engine(
     max_overflow=5,
     pool_pre_ping=True,
     pool_recycle=3600,
-    echo=settings.debug,
+    echo=False,  # SQL query logging is controlled via Python logging config in main.py
 )
 
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
