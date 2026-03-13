@@ -66,8 +66,10 @@ class ShortTermMemoryService(BaseMemoryService):
                     {
                         "message_id": m.id,  # For audit trail
                         "sender_name": (
-                            m.sender_user.username if m.sender_user
-                            else m.sender_ai.username if m.sender_ai
+                            m.sender_user.username
+                            if m.sender_user
+                            else m.sender_ai.username
+                            if m.sender_ai
                             else "Unknown"
                         ),
                         "sender_user_id": m.sender_user_id,  # Keep for reference

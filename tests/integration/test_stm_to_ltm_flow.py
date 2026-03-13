@@ -17,7 +17,7 @@ class StubAIProvider:
         return (
             '{"facts": ['
             '{"text": "User liebt Rust", "importance": 0.9, "participants": ["user1"], "theme": "Rust"}'
-            ']}'  # noqa: E501
+            "]}"  # noqa: E501
         )
 
 
@@ -65,6 +65,7 @@ async def test_stm_to_ltm_flow(db_session):
     # Create a few conversation messages
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
+
     from app.models.message import Message
 
     messages = []

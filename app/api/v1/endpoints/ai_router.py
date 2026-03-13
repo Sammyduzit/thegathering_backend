@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, status
 
 from app.core.auth_dependencies import get_admin_user_with_csrf, get_current_admin_user
+from app.core.config import settings
 from app.models.user import User
 from app.schemas.ai_schemas import (
     AIAvailableResponse,
+    AIConfigResponse,
     AIEntityCreate,
     AIEntityResponse,
     AIEntityUpdate,
@@ -14,6 +16,18 @@ from app.services.ai.ai_entity_service import AIEntityService
 from app.services.service_dependencies import get_ai_entity_service
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+@router.get("/config", response_model=AIConfigResponse)
+async def get_ai_config(
+    current_admin: User = Depends(get_current_admin_user),
+) -> AIConfigResponse:
+    """
+    Get global AI configuration status (Admin only).
+    :param current_admin: Current authenticated admin
+    :return: Global AI config flags
+    """
+    return AIConfigResponse(agent_mode_enabled=settings.ai_agent_mode_enabled)
 
 
 @router.get("/entities", response_model=list[AIEntityResponse])
@@ -77,6 +91,7 @@ async def create_ai_entity(
         username=entity_data.username,
         description=entity_data.description,
         system_prompt=entity_data.system_prompt,
+        provider=entity_data.provider,
         model_name=entity_data.model_name,
         temperature=entity_data.temperature,
         max_tokens=entity_data.max_tokens,
@@ -86,6 +101,7 @@ async def create_ai_entity(
         cooldown_seconds=entity_data.cooldown_seconds,
         config=entity_data.config,
         avatar_url=entity_data.avatar_url,
+        agent_mode_enabled=entity_data.agent_mode_enabled,
     )
 
 
@@ -116,6 +132,7 @@ async def update_ai_entity(
         username=entity_data.username,
         description=entity_data.description,
         system_prompt=entity_data.system_prompt,
+        provider=entity_data.provider,
         model_name=entity_data.model_name,
         temperature=entity_data.temperature,
         max_tokens=entity_data.max_tokens,
@@ -125,6 +142,7 @@ async def update_ai_entity(
         cooldown_seconds=entity_data.cooldown_seconds,
         config=entity_data.config,
         avatar_url=entity_data.avatar_url,
+        agent_mode_enabled=entity_data.agent_mode_enabled,
         status=entity_data.status,
         current_room_id=entity_data.current_room_id,
     )

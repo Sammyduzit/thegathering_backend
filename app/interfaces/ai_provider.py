@@ -9,6 +9,8 @@ Based on LangChain 0.3.x architecture with modern async patterns.
 
 from abc import ABC, abstractmethod
 
+from langchain_core.language_models.chat_models import BaseChatModel
+
 from app.core.constants import DEFAULT_PROVIDER_MAX_TOKENS, DEFAULT_PROVIDER_TEMPERATURE
 
 
@@ -74,6 +76,23 @@ class IAIProvider(ABC):
         Get the current model name being used.
 
         :return: Model identifier (e.g., 'gpt-4', 'claude-3-opus')
+        """
+        pass
+
+    @abstractmethod
+    def get_chat_model(
+        self,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> BaseChatModel:
+        """
+        Get the underlying LangChain chat model instance.
+
+        This is used by tool-calling agent runtimes (e.g. create_agent).
+
+        :param temperature: Optional temperature override for this model instance
+        :param max_tokens: Optional max_tokens override for this model instance
+        :return: Provider-configured LangChain BaseChatModel
         """
         pass
 

@@ -12,13 +12,14 @@ from app.core.exceptions import (
     RoomNotFoundException,
 )
 from app.interfaces.ai_provider import IAIProvider
-from app.models.ai_entity import AIEntity, AIEntityStatus, AIResponseStrategy
+from app.models.ai_entity import AIEntity, AIEntityStatus, AIModelProvider, AIResponseStrategy
 from app.models.message import Message
 from app.repositories.ai_cooldown_repository import IAICooldownRepository
 from app.repositories.ai_entity_repository import IAIEntityRepository
 from app.repositories.conversation_repository import IConversationRepository
 from app.repositories.message_repository import IMessageRepository
 from app.repositories.room_repository import IRoomRepository
+from app.services.domain.avatar_service import generate_avatar_url
 
 if TYPE_CHECKING:
     from app.models.conversation import Conversation
@@ -68,6 +69,7 @@ class AIEntityService:
         username: str,
         system_prompt: str,
         model_name: str,
+        provider: AIModelProvider = AIModelProvider.OPENAI,
         description: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
@@ -77,6 +79,7 @@ class AIEntityService:
         cooldown_seconds: int | None = None,
         config: dict | None = None,
         avatar_url: str | None = None,
+        agent_mode_enabled: bool = False,
     ) -> AIEntity:
         """Create new AI entity with validation."""
         if await self.ai_entity_repo.username_exists(username):
@@ -84,14 +87,13 @@ class AIEntityService:
 
         # Generate avatar if not provided
         if not avatar_url:
-            from app.services.domain.avatar_service import generate_avatar_url
-
             avatar_url = await generate_avatar_url(username, style="bottts")
 
         new_entity = AIEntity(
             username=username,
             description=description,
             system_prompt=system_prompt,
+            provider=provider,
             model_name=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -101,6 +103,7 @@ class AIEntityService:
             cooldown_seconds=cooldown_seconds,
             config=config,
             avatar_url=avatar_url,
+            agent_mode_enabled=agent_mode_enabled,
             status=AIEntityStatus.OFFLINE,
         )
 
@@ -112,6 +115,7 @@ class AIEntityService:
         username: str | None = None,
         description: str | None = None,
         system_prompt: str | None = None,
+        provider: AIModelProvider | None = None,
         model_name: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
@@ -121,6 +125,7 @@ class AIEntityService:
         cooldown_seconds: int | None = None,
         config: dict | None = None,
         avatar_url: str | None = None,
+        agent_mode_enabled: bool | None = None,
         status: AIEntityStatus | None = None,
         current_room_id: int | None = ...,  # ... as sentinel: not provided
     ) -> AIEntity:
@@ -146,6 +151,7 @@ class AIEntityService:
             username=username,
             description=description,
             system_prompt=system_prompt,
+            provider=provider,
             model_name=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -155,6 +161,7 @@ class AIEntityService:
             cooldown_seconds=cooldown_seconds,
             config=config,
             avatar_url=avatar_url,
+            agent_mode_enabled=agent_mode_enabled,
         )
 
         # Commit changes with optimistic locking for room assignment
@@ -348,6 +355,7 @@ class AIEntityService:
         username: str | None = None,
         description: str | None = None,
         system_prompt: str | None = None,
+        provider: AIModelProvider | None = None,
         model_name: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
@@ -357,6 +365,7 @@ class AIEntityService:
         cooldown_seconds: int | None = None,
         config: dict | None = None,
         avatar_url: str | None = None,
+        agent_mode_enabled: bool | None = None,
     ) -> None:
         """
         Update entity fields if provided.
@@ -365,6 +374,7 @@ class AIEntityService:
         :param username: New username (if provided)
         :param description: New description (if provided)
         :param system_prompt: New system prompt (if provided)
+        :param provider: New provider (if provided)
         :param model_name: New model name (if provided)
         :param temperature: New temperature (if provided)
         :param max_tokens: New max tokens (if provided)
@@ -383,6 +393,8 @@ class AIEntityService:
             entity.description = description
         if system_prompt is not None:
             entity.system_prompt = system_prompt
+        if provider is not None:
+            entity.provider = provider
         if model_name is not None:
             entity.model_name = model_name
         if temperature is not None:
@@ -401,6 +413,8 @@ class AIEntityService:
             entity.config = config
         if avatar_url is not None:
             entity.avatar_url = avatar_url
+        if agent_mode_enabled is not None:
+            entity.agent_mode_enabled = agent_mode_enabled
 
     async def _generate_farewell_message(
         self,

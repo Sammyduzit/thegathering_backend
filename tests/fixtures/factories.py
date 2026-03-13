@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth_utils import hash_password
-from app.models.ai_entity import AIEntity, AIEntityStatus, AIResponseStrategy
+from app.models.ai_entity import AIEntity, AIEntityStatus, AIModelProvider, AIResponseStrategy
 from app.models.conversation import Conversation, ConversationType
 from app.models.message import Message
 from app.models.room import Room
@@ -322,6 +322,7 @@ class AIFactory(BaseFactory):
             "username": username,
             "avatar_url": f"https://api.dicebear.com/7.x/bottts/svg?seed={username}",
             "system_prompt": "You are a helpful AI assistant for testing.",
+            "provider": AIModelProvider.OPENAI,
             "model_name": "gpt-4o-mini",
             "temperature": 0.7,
             "max_tokens": 512,

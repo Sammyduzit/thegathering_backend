@@ -11,7 +11,7 @@ from app.core.constants import (
     MIN_AI_TEMPERATURE,
 )
 from app.core.validators import SanitizedString
-from app.models.ai_entity import AIEntityStatus, AIResponseStrategy
+from app.models.ai_entity import AIEntityStatus, AIModelProvider, AIResponseStrategy
 
 
 class AIEntityCreate(BaseModel):
@@ -20,6 +20,7 @@ class AIEntityCreate(BaseModel):
     username: SanitizedString = Field(min_length=1, max_length=200, description="Unique AI username")
     description: str | None = Field(None, max_length=1000, description="AI entity description")
     system_prompt: str = Field(min_length=1, max_length=50000, description="AI system prompt/instructions")
+    provider: AIModelProvider = Field(AIModelProvider.OPENAI, description="LLM provider (openai|google)")
     model_name: SanitizedString = Field(min_length=1, max_length=100, description="LLM model name")
     temperature: float | None = Field(None, ge=MIN_AI_TEMPERATURE, le=MAX_AI_TEMPERATURE, description="LLM temperature")
     max_tokens: int | None = Field(None, ge=MIN_AI_MAX_TOKENS, le=MAX_AI_MAX_TOKENS, description="Max response tokens")
@@ -45,6 +46,7 @@ class AIEntityCreate(BaseModel):
 
     config: dict | None = Field(None, description="Additional LangChain configuration")
     avatar_url: str | None = Field(None, description="Optional custom avatar URL (auto-generated if null)")
+    agent_mode_enabled: bool = Field(False, description="Enable agent mode (tool-calling) for this entity")
 
 
 class AIEntityUpdate(BaseModel):
@@ -53,6 +55,7 @@ class AIEntityUpdate(BaseModel):
     username: SanitizedString | None = Field(None, min_length=1, max_length=200)
     description: str | None = Field(None, max_length=1000)
     system_prompt: str | None = Field(None, min_length=1, max_length=50000)
+    provider: AIModelProvider | None = Field(None, description="LLM provider (openai|google)")
     model_name: SanitizedString | None = Field(None, min_length=1, max_length=100)
     temperature: float | None = Field(None, ge=MIN_AI_TEMPERATURE, le=MAX_AI_TEMPERATURE)
     max_tokens: int | None = Field(None, ge=MIN_AI_MAX_TOKENS, le=MAX_AI_MAX_TOKENS)
@@ -74,6 +77,7 @@ class AIEntityUpdate(BaseModel):
 
     config: dict | None = None
     avatar_url: str | None = Field(None, description="Update avatar URL")
+    agent_mode_enabled: bool | None = Field(None, description="Enable agent mode (tool-calling) for this entity")
     status: AIEntityStatus | None = Field(None, description="AI online/offline status")
     current_room_id: int | None = Field(
         None, description="Room assignment (None=leave room, int=assign to room, omit=no change)"
@@ -87,6 +91,7 @@ class AIEntityResponse(BaseModel):
     username: str
     description: str | None
     system_prompt: str
+    provider: AIModelProvider
     model_name: str
     temperature: float | None
     max_tokens: int | None
@@ -101,6 +106,7 @@ class AIEntityResponse(BaseModel):
 
     config: dict | None
     avatar_url: str | None
+    agent_mode_enabled: bool
     status: AIEntityStatus
     is_active: bool
     current_room_id: int | None
@@ -122,10 +128,17 @@ class AIAvailableResponse(BaseModel):
 
     id: int
     username: str
+    provider: AIModelProvider
     model_name: str
     status: AIEntityStatus
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AIConfigResponse(BaseModel):
+    """Response for global AI configuration status."""
+
+    agent_mode_enabled: bool = Field(description="Whether agent mode is globally enabled (AI_AGENT_MODE_ENABLED)")
 
 
 class AIGoodbyeResponse(BaseModel):

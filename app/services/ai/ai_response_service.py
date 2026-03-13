@@ -11,11 +11,14 @@ import re
 
 import structlog
 
+from app.core.config import settings
 from app.interfaces.ai_provider import AIProviderError, IAIProvider
 from app.models.ai_entity import AIEntity
 from app.models.message import Message
 from app.repositories.ai_cooldown_repository import IAICooldownRepository
 from app.repositories.message_repository import IMessageRepository
+from app.repositories.user_repository import IUserRepository
+from app.services.ai.agent_response_service import AgentResponseService
 from app.services.ai.ai_context_service import AIContextService
 from app.services.ai.response_strategies import ConversationResponseStrategyEvaluator, RoomResponseStrategyEvaluator
 
@@ -31,11 +34,15 @@ class AIResponseService:
         context_service: AIContextService,
         message_repo: IMessageRepository,
         cooldown_repo: IAICooldownRepository,
+        user_repo: IUserRepository | None = None,
+        agent_response_service: AgentResponseService | None = None,
     ):
         self.ai_provider = ai_provider
         self.context_service = context_service
         self.message_repo = message_repo
         self.cooldown_repo = cooldown_repo
+        self.user_repo = user_repo
+        self.agent_response_service = agent_response_service
 
         # Strategy evaluators
         self.room_strategy_evaluator = RoomResponseStrategyEvaluator()
@@ -82,12 +89,13 @@ IMPORTANT: You respond directly as part of the conversation.
 NEVER begin your responses with your name '{ai_entity.username}:' or similar prefix formats.
 Respond naturally and directly."""
 
-            # Generate response from LLM
-            response_content = await self.ai_provider.generate_response(
+            # Generate response (agent-mode for conversations, fallback to direct LLM)
+            response_content = await self._generate_conversation_content(
                 messages=messages,
                 system_prompt=system_prompt,
-                temperature=ai_entity.temperature,
-                max_tokens=ai_entity.max_tokens,
+                ai_entity=ai_entity,
+                conversation_id=conversation_id,
+                user_id=user_id,
             )
 
             # Post-processing: Remove any name prefixes (safety net)
@@ -182,6 +190,61 @@ Respond naturally and directly."""
         except Exception as e:
             logger.error(f"Failed to generate AI response for room {room_id}: {e}")
             raise AIProviderError(f"AI response generation failed: {str(e)}", original_error=e)
+
+    async def _generate_conversation_content(
+        self,
+        messages: list[dict[str, str]],
+        system_prompt: str,
+        ai_entity: AIEntity,
+        conversation_id: int,
+        user_id: int | None,
+    ) -> str:
+        """Generate conversation content using agent mode when enabled."""
+        if (
+            settings.ai_agent_mode_enabled
+            and ai_entity.agent_mode_enabled
+            and user_id is not None
+            and self.user_repo is not None
+            and self.context_service.memory_retriever is not None
+        ):
+            try:
+                if self.agent_response_service is None:
+                    self.agent_response_service = AgentResponseService(
+                        ai_provider=self.ai_provider,
+                        memory_retriever=self.context_service.memory_retriever,
+                        message_repo=self.message_repo,
+                        user_repo=self.user_repo,
+                    )
+
+                response = await self.agent_response_service.generate_conversation_response(
+                    messages=messages,
+                    system_prompt=system_prompt,
+                    temperature=ai_entity.temperature,
+                    max_tokens=ai_entity.max_tokens,
+                    ai_entity_id=ai_entity.id,
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                )
+                logger.info(
+                    "agent_mode_used",
+                    ai_entity_id=ai_entity.id,
+                    conversation_id=conversation_id,
+                )
+                return response
+            except Exception as exc:
+                logger.warning(
+                    "agent_mode_failed_fallback_to_direct_llm",
+                    ai_entity_id=ai_entity.id,
+                    conversation_id=conversation_id,
+                    error=str(exc),
+                )
+
+        return await self.ai_provider.generate_response(
+            messages=messages,
+            system_prompt=system_prompt,
+            temperature=ai_entity.temperature,
+            max_tokens=ai_entity.max_tokens,
+        )
 
     async def should_ai_respond(
         self,

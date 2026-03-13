@@ -8,7 +8,8 @@ import structlog
 
 from app.core.config import settings
 from app.interfaces.ai_provider import IAIProvider
-from app.providers.openai_provider import OpenAIProvider
+from app.models.ai_entity import AIModelProvider
+from app.providers.provider_factory import create_ai_provider
 
 logger = structlog.get_logger(__name__)
 
@@ -28,7 +29,7 @@ def get_ai_provider() -> IAIProvider | None:
         return None
 
     try:
-        provider = OpenAIProvider(api_key=settings.openai_api_key)
+        provider = create_ai_provider(provider=AIModelProvider.OPENAI)
         logger.info(f"AI Provider initialized: {provider.get_model_name()}")
         return provider
     except Exception as e:

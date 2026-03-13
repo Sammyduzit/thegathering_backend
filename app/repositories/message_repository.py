@@ -4,6 +4,7 @@ import structlog
 from sqlalchemy import and_, delete, desc, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.message import Message, MessageType
 from app.repositories.base_repository import BaseRepository
@@ -90,6 +91,11 @@ class IMessageRepository(BaseRepository[Message]):
     @abstractmethod
     async def cleanup_old_room_messages(self, room_id: int, keep_count: int = 100) -> int:
         """Delete old room messages, keeping only the most recent ones"""
+        pass
+
+    @abstractmethod
+    async def search_messages(self, query: str, conversation_id: int, limit: int = 5) -> list[Message]:
+        """Search messages by substring within a specific conversation scope."""
         pass
 
     @abstractmethod
@@ -201,8 +207,6 @@ class MessageRepository(IMessageRepository):
         result = await self.db.execute(count_query)
         total_count = result.scalar() or 0
 
-        from sqlalchemy.orm import selectinload
-
         offset = (page - 1) * page_size
         messages_query = (
             select(Message)
@@ -232,8 +236,6 @@ class MessageRepository(IMessageRepository):
         total_count = result.scalar() or 0
 
         offset = (page - 1) * page_size
-        from sqlalchemy.orm import selectinload
-
         messages_query = (
             select(Message)
             .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
@@ -255,8 +257,6 @@ class MessageRepository(IMessageRepository):
 
     async def get_user_messages(self, user_id: int, limit: int = 50) -> list[Message]:
         """Get messages sent by a specific user."""
-        from sqlalchemy.orm import selectinload
-
         query = (
             select(Message)
             .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
@@ -270,8 +270,6 @@ class MessageRepository(IMessageRepository):
 
     async def get_latest_room_messages(self, room_id: int, limit: int = 10) -> list[Message]:
         """Get latest messages from a room."""
-        from sqlalchemy.orm import selectinload
-
         query = (
             select(Message)
             .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
@@ -285,8 +283,6 @@ class MessageRepository(IMessageRepository):
 
     async def get_latest_conversation_message(self, conversation_id: int) -> Message | None:
         """Get most recent message from a conversation."""
-        from sqlalchemy.orm import selectinload
-
         query = (
             select(Message)
             .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
@@ -311,8 +307,6 @@ class MessageRepository(IMessageRepository):
         Get recent messages from either a room or conversation.
         Unified method for fetching latest messages regardless of context.
         """
-        from sqlalchemy.orm import selectinload
-
         # Validate XOR: exactly one must be set
         if (room_id is None) == (conversation_id is None):
             raise ValueError("Exactly one of room_id or conversation_id must be provided")
@@ -378,6 +372,34 @@ class MessageRepository(IMessageRepository):
             logger.error(f"Error cleaning up room messages: {e}")
             await self.db.rollback()
             return 0
+
+    async def search_messages(self, query: str, conversation_id: int, limit: int = 5) -> list[Message]:
+        """
+        Search conversation messages via case-insensitive substring matching.
+
+        Scope is strictly limited to one conversation to avoid cross-chat leakage.
+        """
+        normalized_query = query.strip()
+        if not normalized_query:
+            return []
+
+        safe_limit = min(max(limit, 1), 10)
+        messages_query = (
+            select(Message)
+            .options(selectinload(Message.sender_user), selectinload(Message.sender_ai))
+            .where(
+                and_(
+                    Message.conversation_id == conversation_id,
+                    Message.room_id.is_(None),
+                    Message.content.ilike(f"%{normalized_query}%"),
+                )
+            )
+            .order_by(desc(Message.sent_at))
+            .limit(safe_limit)
+        )
+
+        result = await self.db.execute(messages_query)
+        return list(result.scalars().all())
 
     async def delete_room_messages(self, room_id: int) -> int:
         """

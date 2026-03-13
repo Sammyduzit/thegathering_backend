@@ -237,3 +237,47 @@ class TestMessageRepository:
 
         # Assert
         assert exists is False
+
+    async def test_search_messages_scoped_to_conversation(
+        self, db_session, user_factory, room_factory, conversation_factory, message_factory
+    ):
+        """Search must only return matches from the requested conversation."""
+        repo = MessageRepository(db_session)
+        user = await user_factory.create(db_session)
+        room = await room_factory.create(db_session)
+        target_conversation = await conversation_factory.create_private_conversation(db_session, room=room)
+        other_conversation = await conversation_factory.create_private_conversation(db_session, room=room)
+
+        await message_factory.create_conversation_message(
+            db_session, sender=user, conversation=target_conversation, content="I love Rust and FastAPI"
+        )
+        await message_factory.create_conversation_message(
+            db_session, sender=user, conversation=other_conversation, content="Rust in another chat"
+        )
+        await message_factory.create_room_message(db_session, sender=user, room=room, content="Rust in room chat")
+
+        results = await repo.search_messages(query="Rust", conversation_id=target_conversation.id, limit=5)
+
+        assert len(results) == 1
+        assert results[0].conversation_id == target_conversation.id
+        assert "Rust" in results[0].content
+
+    async def test_search_messages_limit_and_empty_query(
+        self, db_session, user_factory, room_factory, conversation_factory, message_factory
+    ):
+        """Search should honor limit and short-circuit empty queries."""
+        repo = MessageRepository(db_session)
+        user = await user_factory.create(db_session)
+        room = await room_factory.create(db_session)
+        conversation = await conversation_factory.create_private_conversation(db_session, room=room)
+
+        for idx in range(6):
+            await message_factory.create_conversation_message(
+                db_session, sender=user, conversation=conversation, content=f"python topic {idx}"
+            )
+
+        empty_results = await repo.search_messages(query="   ", conversation_id=conversation.id, limit=5)
+        limited_results = await repo.search_messages(query="python", conversation_id=conversation.id, limit=3)
+
+        assert empty_results == []
+        assert len(limited_results) == 3

@@ -29,6 +29,7 @@ class Settings(BaseSettings):
 
     redis_url: str
     ai_features_enabled: bool = True
+    ai_agent_mode_enabled: bool = False
 
     # RAG & Vector Search Configuration
     enable_vector_search: bool = True

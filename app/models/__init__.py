@@ -1,7 +1,7 @@
 from app.core.database import Base
 
 from .ai_cooldown import AICooldown
-from .ai_entity import AIEntity, AIEntityStatus, AIResponseStrategy
+from .ai_entity import AIEntity, AIEntityStatus, AIModelProvider, AIResponseStrategy
 from .ai_memory import AIMemory
 from .conversation import Conversation, ConversationType
 from .conversation_participant import ConversationParticipant
@@ -25,5 +25,6 @@ __all__ = [
     "ConversationType",
     "MessageType",
     "AIEntityStatus",
+    "AIModelProvider",
     "AIResponseStrategy",
 ]

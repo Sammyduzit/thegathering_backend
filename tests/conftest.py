@@ -12,6 +12,7 @@ Test-specific fixtures are located in their respective conftest.py files:
 
 import pytest
 
+from app.models.ai_entity import AIModelProvider
 from tests.fixtures import AIFactory, ConversationFactory, MessageFactory, RoomFactory, UserFactory
 
 # ============================================================================
@@ -63,6 +64,7 @@ def sample_ai_entity_data():
     return {
         "username": "test_ai",
         "system_prompt": "You are a test AI assistant",
+        "provider": AIModelProvider.OPENAI,
         "model_name": "gpt-4",
     }
 

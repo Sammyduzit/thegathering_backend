@@ -115,7 +115,9 @@ class TestAIContextService:
             id=2,
             entity_id=1,
             summary="Cats",
-            memory_content={"fact": {"text": "User mentioned cats", "importance": 0.6, "participants": ["Alice"], "theme": "Cats"}},
+            memory_content={
+                "fact": {"text": "User mentioned cats", "importance": 0.6, "participants": ["Alice"], "theme": "Cats"}
+            },
             importance_score=0.6,
             memory_metadata={"type": "long_term"},
         )

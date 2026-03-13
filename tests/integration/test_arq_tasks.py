@@ -2,7 +2,9 @@
 
 import pytest
 from arq import Retry
+from langchain_core.messages import AIMessage
 
+from app.core.config import settings
 from app.interfaces.ai_provider import AIProviderError
 from app.repositories.ai_memory_repository import AIMemoryRepository
 from app.repositories.conversation_repository import ConversationRepository
@@ -25,12 +27,16 @@ class FakeProvider:
 
     def __init__(self, content="AI reply"):
         self.content = content
+        self.model = None
 
     async def generate_response(self, **kwargs):
         return self.content
 
     async def check_availability(self):
         return True
+
+    def get_chat_model(self, temperature=None, max_tokens=None):
+        return self.model
 
 
 class FakeKeywordExtractor:
@@ -46,7 +52,7 @@ class FakeLTMProvider:
         return (
             '{"facts": ['
             '{"text": "User discussed memory storage", "importance": 0.5, "participants": ["User"], "theme": "Memory"}'
-            ']}'
+            "]}"
         )
 
 
@@ -61,6 +67,24 @@ class FakeEmbeddingService:
         return [[0.0] * 3 for _ in texts]
 
 
+class FakeMemoryRetriever:
+    async def retrieve_tiered(self, **kwargs):
+        return []
+
+
+class FakeChatModel:
+    def __init__(self, responses):
+        self._responses = list(responses)
+        self.bound_tools = None
+
+    def bind_tools(self, tools):
+        self.bound_tools = tools
+        return self
+
+    async def ainvoke(self, messages):
+        return self._responses.pop(0)
+
+
 class FakeLongEmbeddingService(FakeEmbeddingService):
     async def embed_batch(self, texts):
         if self.raise_error:
@@ -73,12 +97,14 @@ class FakeLongEmbeddingService(FakeEmbeddingService):
         return [0.0] * 1536
 
 
-def _monkeypatch_ai_stack(monkeypatch, *, provider=None, ltm_provider=None, embedding_service=None, keyword_extractor=None):
+def _monkeypatch_ai_stack(
+    monkeypatch, *, provider=None, ltm_provider=None, embedding_service=None, keyword_extractor=None
+):
     """Monkeypatch AI dependencies used inside tasks."""
     if provider:
-        monkeypatch.setattr("app.workers.tasks.OpenAIProvider", lambda *a, **k: provider)
+        monkeypatch.setattr("app.workers.tasks.create_provider_for_entity", lambda *a, **k: provider)
     if ltm_provider is not None:
-        monkeypatch.setattr("app.providers.google_provider.GoogleProvider", lambda *a, **k: ltm_provider)
+        monkeypatch.setattr("app.workers.tasks.create_ai_provider", lambda *a, **k: ltm_provider)
     if embedding_service is not None:
         monkeypatch.setattr("app.workers.tasks.get_embedding_service", lambda: embedding_service)
         monkeypatch.setattr("app.workers.tasks.get_memory_retriever", lambda **kwargs: None)
@@ -128,6 +154,90 @@ async def test_check_and_generate_ai_response_happy_path(
     ai_message = await repo.get_by_id(result["ai_message_id"])
     assert ai_message is not None
     assert ai_message.sender_ai_id == ai_entity.id
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_check_and_generate_ai_response_agent_mode_executes_tool_call(
+    db_session,
+    user_factory,
+    conversation_factory,
+    message_factory,
+    ai_entity_factory,
+    monkeypatch,
+):
+    original_flag = settings.ai_agent_mode_enabled
+    settings.ai_agent_mode_enabled = True
+    try:
+        user = await user_factory.create(db_session)
+        conversation = await conversation_factory.create_private_conversation(db_session)
+        conv_repo = ConversationRepository(db_session)
+        await conv_repo.add_participant(conversation_id=conversation.id, user_id=user.id)
+        ai_entity = await ai_entity_factory.create_online(db_session, agent_mode_enabled=True)
+        await conv_repo.add_participant(conversation_id=conversation.id, ai_entity_id=ai_entity.id)
+
+        await message_factory.create_conversation_message(
+            db_session, sender=user, conversation=conversation, content="Rust is great for systems work."
+        )
+        message = await message_factory.create_conversation_message(
+            db_session, sender=user, conversation=conversation, content="Can you check our rust discussion?"
+        )
+
+        model = FakeChatModel(
+            [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {"id": "call_1", "name": "search_message_history", "args": {"query": "rust", "limit": 2}}
+                    ],
+                ),
+                AIMessage(content="Final answer with tool context"),
+            ]
+        )
+        provider = FakeProvider("Direct fallback")
+        provider.model = model
+
+        monkeypatch.setattr("app.workers.tasks.create_provider_for_entity", lambda *a, **k: provider)
+        monkeypatch.setattr("app.workers.tasks.get_embedding_service", lambda: FakeEmbeddingService())
+        monkeypatch.setattr("app.workers.tasks.get_memory_retriever", lambda **kwargs: FakeMemoryRetriever())
+        monkeypatch.setattr("app.workers.tasks.create_keyword_extractor", lambda: FakeKeywordExtractor())
+
+        def _create_agent_unavailable(*args, **kwargs):
+            raise RuntimeError("create_agent unavailable in test")
+
+        monkeypatch.setattr(
+            "app.services.ai.agent_response_service.create_agent",
+            _create_agent_unavailable,
+        )
+
+        call_info = {}
+        original_search = MessageRepository.search_messages
+
+        async def spy_search(self, query: str, conversation_id: int, limit: int = 5):
+            call_info["count"] = call_info.get("count", 0) + 1
+            call_info["args"] = (query, conversation_id, limit)
+            return await original_search(self, query, conversation_id, limit)
+
+        monkeypatch.setattr(MessageRepository, "search_messages", spy_search)
+
+        ctx = {"db_manager": FakeDbManager(db_session), "job_try": 1}
+
+        result = await check_and_generate_ai_response(
+            ctx,
+            message_id=message.id,
+            conversation_id=conversation.id,
+            ai_entity_id=ai_entity.id,
+        )
+
+        assert call_info.get("count") == 1
+        assert call_info.get("args") == ("rust", conversation.id, 2)
+        assert result["ai_message_id"] > 0
+        repo = MessageRepository(db_session)
+        ai_message = await repo.get_by_id(result["ai_message_id"])
+        assert ai_message is not None
+        assert ai_message.content == "Final answer with tool context"
+    finally:
+        settings.ai_agent_mode_enabled = original_flag
 
 
 @pytest.mark.integration
@@ -184,6 +294,7 @@ async def test_create_long_term_memory_task_happy_path(
 ):
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
+
     from app.models.message import Message
     from app.services.memory.short_term_memory_service import ShortTermMemoryService
 
@@ -290,6 +401,7 @@ async def test_create_long_term_memory_task_retries_on_embedding_error(
 ):
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
+
     from app.models.message import Message
     from app.services.memory.short_term_memory_service import ShortTermMemoryService
 
@@ -359,6 +471,7 @@ async def test_create_long_term_memory_task_creates_missing_stm_chunks(
     """Ensure catch-up STM chunking runs when no STM exists (partial chunk)."""
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
+
     from app.models.message import Message
     from app.repositories.ai_memory_repository import AIMemoryRepository
 

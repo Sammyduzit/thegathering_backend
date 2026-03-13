@@ -50,6 +50,13 @@ class AIResponseStrategy(str, enum.Enum):
     NO_RESPONSE = "no_response"
 
 
+class AIModelProvider(str, enum.Enum):
+    """Supported LLM providers for AI entities."""
+
+    OPENAI = "openai"
+    GOOGLE = "google"
+
+
 class AIEntity(Base):
     """AI entity - equal to User in The Gathering world."""
 
@@ -61,6 +68,15 @@ class AIEntity(Base):
 
     # LangChain/OpenAI Configuration
     system_prompt: Mapped[str] = mapped_column(Text)
+    provider: Mapped[AIModelProvider] = mapped_column(
+        Enum(
+            AIModelProvider,
+            name="aimodelprovider",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        default=AIModelProvider.OPENAI,
+        server_default=AIModelProvider.OPENAI.value,
+    )
     model_name: Mapped[str] = mapped_column(String(100), default=DEFAULT_AI_MODEL)
     temperature: Mapped[float] = mapped_column(Float, default=DEFAULT_AI_TEMPERATURE)
     max_tokens: Mapped[int] = mapped_column(default=DEFAULT_AI_MAX_TOKENS)
@@ -84,6 +100,8 @@ class AIEntity(Base):
 
     # Avatar URL (DiceBear API)
     avatar_url: Mapped[str | None] = mapped_column(String(500), default=None)
+
+    agent_mode_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
     status: Mapped[AIEntityStatus] = mapped_column(Enum(AIEntityStatus), default=AIEntityStatus.OFFLINE, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)

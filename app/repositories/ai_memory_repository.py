@@ -170,9 +170,7 @@ class AIMemoryRepository(IAIMemoryRepository):
 
         return delete_result.rowcount or 0
 
-    async def get_short_term_chunks(
-        self, conversation_id: int, entity_id: int
-    ) -> list[AIMemory]:
+    async def get_short_term_chunks(self, conversation_id: int, entity_id: int) -> list[AIMemory]:
         """
         Get all short-term memory chunks for a conversation, ordered by chunk index.
 
@@ -193,9 +191,7 @@ class AIMemoryRepository(IAIMemoryRepository):
         chunks_result = await self.db.execute(chunks_query)
         return list(chunks_result.scalars().all())
 
-    async def delete_short_term_chunks(
-        self, conversation_id: int, entity_id: int
-    ) -> int:
+    async def delete_short_term_chunks(self, conversation_id: int, entity_id: int) -> int:
         """
         Delete all short-term chunks for a conversation.
 

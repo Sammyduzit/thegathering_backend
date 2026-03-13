@@ -11,7 +11,7 @@ engine = create_async_engine(
     max_overflow=5,
     pool_pre_ping=True,
     pool_recycle=3600,
-    echo=settings.debug,
+    echo=False,  # SQL query logging is controlled via Python logging config in main.py
 )
 
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -33,7 +33,12 @@ async def create_tables():
     async with engine.begin() as conn:
         # Enable pgvector extension before creating tables
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         await conn.run_sync(Base.metadata.create_all)
+        # GIN index for trigram-based full-text search on message content
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_messages_content_trgm ON messages USING GIN (content gin_trgm_ops)")
+        )
     print("All tables created")
 
 
